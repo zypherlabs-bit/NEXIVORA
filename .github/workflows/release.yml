@@ -23,6 +23,13 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      - name: Verify frontend assets exist
+        working-directory: apps/desktop
+        run: |
+          if (-not (Test-Path dist/index.html)) { echo "ERROR: dist/index.html missing"; exit 1 }
+          echo "Frontend assets OK"
+          Get-ChildItem dist | Select-Object Name, Length
+
       - name: Code Signing — Setup certificate (optional)
         if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_SIGNING_CERTIFICATE != '' }}
         run: |
@@ -32,6 +39,7 @@ jobs:
           echo "TAURI_SIGNING_CERTIFICATE_PATH=$(pwd)/certificate.pem" >> $GITHUB_ENV
 
       - name: Build and bundle — Windows
+        working-directory: apps/desktop
         run: tauri build --bundles exe,msi,nsis
         env:
           TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PATH }}
@@ -107,6 +115,13 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      - name: Verify frontend assets exist
+        working-directory: apps/desktop
+        run: |
+          if (-not (Test-Path dist/index.html)) { echo "ERROR: dist/index.html missing"; exit 1 }
+          echo "Frontend assets OK"
+          Get-ChildItem dist | Select-Object Name, Length
+
       - name: Code Signing — Linux (optional)
         if: ${{ secrets.TAURI_LINUX_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_LINUX_SIGNING_PASSPHRASE != '' }}
         run: |
@@ -116,6 +131,7 @@ jobs:
           echo "TAURI_LINUX_SIGNING_PASSPHRASE=${{ secrets.TAURI_LINUX_SIGNING_PASSPHRASE }}" >> $GITHUB_ENV
 
       - name: Build and bundle — Linux
+        working-directory: apps/desktop
         run: tauri build --bundles appimage,deb,rpm
         env:
           TAURI_LINUX_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_LINUX_SIGNING_PRIVATE_KEY_PATH }}
@@ -167,6 +183,13 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      - name: Verify frontend assets exist
+        working-directory: apps/desktop
+        run: |
+          test -f dist/index.html || (echo "ERROR: dist/index.html missing" && exit 1)
+          echo "Frontend assets OK"
+          ls -lh dist
+
       - name: Code Signing — macOS (optional)
         if: ${{ secrets.TAURI_SIGNING_IDENTITY != '' }}
         run: |
@@ -176,6 +199,7 @@ jobs:
           echo "TAURI_NOTARYTOOL_TEAM_ID=${{ secrets.TAURI_NOTARYTOOL_TEAM_ID }}" >> $GITHUB_ENV
 
       - name: Build and bundle — macOS
+        working-directory: apps/desktop
         run: tauri build --bundles app,dmg
         env:
           TAURI_SIGNING_IDENTITY: ${{ env.TAURI_SIGNING_IDENTITY }}
