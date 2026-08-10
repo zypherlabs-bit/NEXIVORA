@@ -29,7 +29,7 @@
 
 ### DMG Installer (Recommended)
 
-1. **Download** the appropriate DMG file from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the appropriate DMG file from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
    - For Apple Silicon: `Nexivora-*-macOS-AppleSilicon.dmg`
    - For Intel: `Nexivora-*-macOS-Intel.dmg`
    - Universal (both): `Nexivora-*-macOS-Universal.dmg`
@@ -189,6 +189,6 @@ Should show: `Mach-O universal binary with 2 architectures: [x86_64:Mach-O 64-bi
 ## Support
 
 For additional help:
-- Check our [FAQ](https://github.com/nexivora/nexivora/wiki/FAQ)
-- Open an [Issue](https://github.com/nexivora/nexivora/issues)
-- Join our [Community Discussions](https://github.com/nexivora/nexivora/discussions)
+- Check our [FAQ](https://github.com/zypherlabs-bit/NEXIVORA/wiki/FAQ)
+- Open an [Issue](https://github.com/zypherlabs-bit/NEXIVORA/issues)
+- Join our [Community Discussions](https://github.com/zypherlabs-bit/NEXIVORA/discussions)

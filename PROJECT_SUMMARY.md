@@ -239,7 +239,7 @@ nexivora/
 
 ### For Developers
 
-1. **Clone**: `git clone https://github.com/nexivora/nexivora.git`
+1. **Clone**: `git clone https://github.com/zypherlabs-bit/NEXIVORA.git`
 2. **Build**: `cargo build --release`
 3. **Test**: `cargo test --workspace`
 4. **Run**: `cargo run --bin nexivora-desktop`

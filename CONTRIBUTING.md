@@ -26,7 +26,7 @@ This project adheres to the [Rust Code of Conduct](https://www.rust-lang.org/pol
 
 ```bash
 # Clone the repository
-git clone https://github.com/nexivora/nexivora.git
+git clone https://github.com/zypherlabs-bit/NEXIVORA.git
 cd nexivora
 
 # Build the project

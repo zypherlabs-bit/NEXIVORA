@@ -20,14 +20,14 @@
 
 ### Standard Installer
 
-1. **Download** the latest Windows installer from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the latest Windows installer from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Run** the installer (e.g., `Nexivora-1.0.0-Windows-x64.exe`)
 3. **Follow** the installation wizard instructions
 4. **Launch** Nexivora from the Start Menu or desktop shortcut
 
 ### Portable Version
 
-1. **Download** the portable ZIP archive from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the portable ZIP archive from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Extract** the ZIP file to your preferred location
 3. **Run** `nexivora.exe` from the extracted folder
 4. No installation required - runs directly from the folder
@@ -124,6 +124,6 @@ Install Windows updates, particularly KB2999226.
 ## Support
 
 For additional help:
-- Check our [FAQ](https://github.com/nexivora/nexivora/wiki/FAQ)
-- Open an [Issue](https://github.com/nexivora/nexivora/issues)
-- Join our [Community Discussions](https://github.com/nexivora/nexivora/discussions)
+- Check our [FAQ](https://github.com/zypherlabs-bit/NEXIVORA/wiki/FAQ)
+- Open an [Issue](https://github.com/zypherlabs-bit/NEXIVORA/issues)
+- Join our [Community Discussions](https://github.com/zypherlabs-bit/NEXIVORA/discussions)

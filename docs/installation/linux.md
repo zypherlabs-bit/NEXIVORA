@@ -31,7 +31,7 @@
 
 ### AppImage (Recommended)
 
-1. **Download** the AppImage from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the AppImage from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Make executable**: `chmod +x Nexivora-*.AppImage`
 3. **Run**: `./Nexivora-*.AppImage`
 
@@ -55,14 +55,14 @@ EOF
 
 ### DEB Package (Debian/Ubuntu)
 
-1. **Download** the DEB package from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the DEB package from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Install dependencies**: `sudo apt update && sudo apt install -y libgtk-3-0 libwebkit2gtk-4.0-37`
 3. **Install**: `sudo dpkg -i nexivora-*.deb`
 4. **Fix dependencies**: `sudo apt --fix-broken install`
 
 ### RPM Package (Fedora/openSUSE)
 
-1. **Download** the RPM package from [GitHub Releases](https://github.com/nexivora/nexivora/releases)
+1. **Download** the RPM package from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Install**: `sudo dnf install ./nexivora-*.rpm` (Fedora) or `sudo zypper install ./nexivora-*.rpm` (openSUSE)
 
 ### Flatpak (When Available)
@@ -199,6 +199,6 @@ Ensure you have X11 or Wayland running and proper display permissions.
 ## Support
 
 For additional help:
-- Check our [FAQ](https://github.com/nexivora/nexivora/wiki/FAQ)
-- Open an [Issue](https://github.com/nexivora/nexivora/issues)
-- Join our [Community Discussions](https://github.com/nexivora/nexivora/discussions)
+- Check our [FAQ](https://github.com/zypherlabs-bit/NEXIVORA/wiki/FAQ)
+- Open an [Issue](https://github.com/zypherlabs-bit/NEXIVORA/issues)
+- Join our [Community Discussions](https://github.com/zypherlabs-bit/NEXIVORA/discussions)

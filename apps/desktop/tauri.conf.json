@@ -2,7 +2,7 @@
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devPath": "../src",
+    "devPath": "../dist",
     "distDir": "../dist"
   },
   "package": {

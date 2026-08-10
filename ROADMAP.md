@@ -117,9 +117,9 @@ Each major version will be supported for at least 12 months after the next major
 
 ## Get Involved
 
-- Join our [Discussions](https://github.com/nexivora/nexivora/discussions)
+- Join our [Discussions](https://github.com/zypherlabs-bit/NEXIVORA/discussions)
 - Check out our [Contributing Guide](CONTRIBUTING.md)
-- Browse open [Issues](https://github.com/nexivora/nexivora/issues)
+- Browse open [Issues](https://github.com/zypherlabs-bit/NEXIVORA/issues)
 - Join our community chat
 
 Together, we can build the future of open-source productivity!

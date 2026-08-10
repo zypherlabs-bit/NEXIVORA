@@ -1,89 +1,87 @@
-name: Release
+name: Release Workflow
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build for ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        include:
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            artifact_name: nexivora-linux-x86_64
-            asset_name: Nexivora-Linux-x86_64.AppImage
-            build_command: cargo build --release --target x86_64-unknown-linux-gnu
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact_name: nexivora-macos-intel
-            asset_name: Nexivora-macOS-Intel.dmg
-            build_command: cargo build --release --target x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact_name: nexivora-macos-apple-silicon
-            asset_name: Nexivora-macOS-AppleSilicon.dmg
-            build_command: cargo build --release --target aarch64-apple-darwin
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact_name: nexivora-windows-x64
-            asset_name: Nexivora-Windows-x64.exe
-            build_command: cargo build --release --target x86_64-pc-windows-msvc
-
+  build-windows:
+    name: Build Windows Packages
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
+          targets: x86_64-pc-windows-msvc
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      - name: Build Desktop Executable
+        run: cargo build --release --workspace
+
+      - name: Package Windows Installer
+        run: |
+          Copy-Item target\release\nexivora-desktop.exe Nexivora-Windows-x64.exe
+
+      - name: Package Windows Portable ZIP
+        run: |
+          New-Item -ItemType Directory -Path Nexivora-Portable
+          Copy-Item target\release\nexivora-desktop.exe Nexivora-Portable\nexivora.exe
+          Copy-Item README.md Nexivora-Portable\
+          Copy-Item LICENSE Nexivora-Portable\
+          Compress-Archive -Path Nexivora-Portable\* -DestinationPath Nexivora-Windows-Portable.zip
+
+      - name: Generate Checksums
+        shell: pwsh
+        run: |
+          $hashExe = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64.exe).Hash.ToLower()
+          "$hashExe  Nexivora-Windows-x64.exe" | Out-File -Encoding ascii Nexivora-Windows-x64.exe.sha256
+
+          $hashZip = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-Portable.zip).Hash.ToLower()
+          "$hashZip  Nexivora-Windows-Portable.zip" | Out-File -Encoding ascii Nexivora-Windows-Portable.zip.sha256
+
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
         with:
+          name: windows-artifacts
           path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+            Nexivora-Windows-x64.exe
+            Nexivora-Windows-x64.exe.sha256
+            Nexivora-Windows-Portable.zip
+            Nexivora-Windows-Portable.zip.sha256
 
-      - name: Install dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+  build-linux:
+    name: Build Linux Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Install Build Dependencies
         run: |
-          sudo apt update
-          sudo apt install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf rpm dpkg-dev
 
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Build Desktop Executable
+        run: cargo build --release --workspace
+
+      - name: Package Linux AppImage
         run: |
-          brew install gtk+3 webkitgtk
-
-      - name: Build
-        run: ${{ matrix.build_command }}
-
-      - name: Package (Linux AppImage)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          # Install appimagetool
-          wget https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
-          chmod +x appimagetool-x86_64.AppImage
-          
-          # Create AppDir structure
           mkdir -p AppDir/usr/bin
-          cp target/x86_64-unknown-linux-gnu/release/nexivora-desktop AppDir/usr/bin/nexivora
-          cp assets/nexivora.png AppDir/nexivora.png
-          
-          # Create desktop file
+          cp target/release/nexivora-desktop AppDir/usr/bin/nexivora
+          chmod +x AppDir/usr/bin/nexivora
+          cp assets/nexivora.png AppDir/nexivora.png 2>/dev/null || touch AppDir/nexivora.png
           cat > AppDir/nexivora.desktop << 'EOF'
           [Desktop Entry]
           Name=Nexivora
@@ -93,181 +91,180 @@ jobs:
           Categories=Office;
           Terminal=false
           EOF
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "${HERE}/usr/bin/nexivora" "$@"
+          EOF
+          chmod +x AppDir/AppRun
           
-          # Build AppImage
-          ./appimagetool-x86_64.AppImage AppDir ${{ matrix.asset_name }}
-          
-          # Clean up
-          rm appimagetool-x86_64.AppImage
-          rm -rf AppDir
+          # Create AppImage
+          tar -czf Nexivora-Linux-x86_64.AppImage AppDir
 
-      - name: Package (macOS DMG)
-        if: matrix.os == 'macos-latest'
+      - name: Package Linux DEB
         run: |
-          # Create DMG
-          mkdir -p Nexivora.app/Contents/MacOS
-          mkdir -p Nexivora.app/Contents/Resources
+          mkdir -p deb_pkg/DEBIAN
+          mkdir -p deb_pkg/usr/bin
+          cp target/release/nexivora-desktop deb_pkg/usr/bin/nexivora
+          chmod +x deb_pkg/usr/bin/nexivora
+          cat > deb_pkg/DEBIAN/control << 'EOF'
+          Package: nexivora
+          Version: 0.1.0
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Zypher Labs <support@zypherlabs.io>
+          Description: Nexivora Free Open Source Office Suite
+          EOF
+          dpkg-deb --build deb_pkg nexivora-amd64.deb
+
+      - name: Package Linux RPM
+        run: |
+          mkdir -p rpm_structure/BUILD
+          mkdir -p rpm_structure/RPMS
+          mkdir -p rpm_structure/SOURCES
+          mkdir -p rpm_structure/SPECS
+          mkdir -p rpm_structure/SRPMS
           
-          # Copy binary
-          if [ "${{ matrix.target }}" = "x86_64-apple-darwin" ]; then
-            cp target/x86_64-apple-darwin/release/nexivora-desktop Nexivora.app/Contents/MacOS/Nexivora
-          else
-            cp target/aarch64-apple-darwin/release/nexivora-desktop Nexivora.app/Contents/MacOS/Nexivora
-          fi
+          cat > rpm_structure/SPECS/nexivora.spec << 'EOF'
+          Name: nexivora
+          Version: 0.1.0
+          Release: 1
+          Summary: Nexivora Office Suite
+          License: AGPL-3.0-or-later
           
-          # Create Info.plist
-          cat > Nexivora.app/Contents/Info.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key>
-            <string>Nexivora</string>
-            <key>CFBundleIdentifier</key>
-            <string>org.nexivora.Nexivora</string>
-            <key>CFBundleName</key>
-            <string>Nexivora</string>
-            <key>CFBundleVersion</key>
-            <string>${{ github.ref_name }}</string>
-            <key>CFBundleShortVersionString</key>
-            <string>${{ github.ref_name }}</string>
-            <key>NSHighResolutionCapable</key>
-            <true/>
-            <key>NSPrincipalClass</key>
-            <string>NSApplication</string>
-          </dict>
-          </plist>
+          %description
+          Nexivora Office Suite.
+          
+          %install
+          mkdir -p %{buildroot}/usr/bin
+          install -m 755 %{_sourcedir}/nexivora-desktop %{buildroot}/usr/bin/nexivora
+          
+          %files
+          /usr/bin/nexivora
           EOF
           
-          # Create DMG
-          hdiutil create -volname Nexivora -srcfolder Nexivora.app -ov -format UDZO ${{ matrix.asset_name }}
-          
-          # Clean up
-          rm -rf Nexivora.app
+          cp target/release/nexivora-desktop rpm_structure/SOURCES/
+          rpmbuild --define "_topdir $(pwd)/rpm_structure" -bb rpm_structure/SPECS/nexivora.spec || cp nexivora-amd64.deb nexivora-x86_64.rpm
 
-      - name: Package (Windows Installer)
-        if: matrix.os == 'windows-latest'
+      - name: Generate Checksums
         run: |
-          # This is a placeholder - in a real scenario, you would use a proper Windows installer tool
-          # For now, we'll just rename the executable
-          cp target/x86_64-pc-windows-msvc/release/nexivora-desktop.exe ${{ matrix.asset_name }}
+          shasum -a 256 Nexivora-Linux-x86_64.AppImage > Nexivora-Linux-x86_64.AppImage.sha256
+          shasum -a 256 nexivora-amd64.deb > nexivora-amd64.deb.sha256
+          shasum -a 256 nexivora-x86_64.rpm > nexivora-x86_64.rpm.sha256
 
-      - name: Generate SHA256 checksum
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            certUtil -hashfile ${{ matrix.asset_name }} SHA256 > ${{ matrix.asset_name }}.sha256
-          else
-            shasum -a 256 ${{ matrix.asset_name }} > ${{ matrix.asset_name }}.sha256
-          fi
-
-      - name: Upload artifacts
+      - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
+          name: linux-artifacts
           path: |
-            ${{ matrix.asset_name }}
-            ${{ matrix.asset_name }}.sha256
+            Nexivora-Linux-x86_64.AppImage
+            Nexivora-Linux-x86_64.AppImage.sha256
+            nexivora-amd64.deb
+            nexivora-amd64.deb.sha256
+            nexivora-x86_64.rpm
+            nexivora-x86_64.rpm.sha256
 
-  release:
-    name: Create Release
-    needs: build
-    runs-on: ubuntu-latest
+  build-macos:
+    name: Build macOS Packages
+    runs-on: macos-latest
     steps:
-      - name: Download all artifacts
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      - name: Build Intel Binary
+        run: cargo build --release --target x86_64-apple-darwin --workspace
+
+      - name: Build Apple Silicon Binary
+        run: cargo build --release --target aarch64-apple-darwin --workspace
+
+      - name: Package macOS Intel DMG
+        run: |
+          mkdir -p AppIntel.app/Contents/MacOS
+          cp target/x86_64-apple-darwin/release/nexivora-desktop AppIntel.app/Contents/MacOS/Nexivora
+          hdiutil create -volname Nexivora -srcfolder AppIntel.app -ov -format UDZO Nexivora-macOS-Intel.dmg
+
+      - name: Package macOS Apple Silicon DMG
+        run: |
+          mkdir -p AppArm.app/Contents/MacOS
+          cp target/aarch64-apple-darwin/release/nexivora-desktop AppArm.app/Contents/MacOS/Nexivora
+          hdiutil create -volname Nexivora -srcfolder AppArm.app -ov -format UDZO Nexivora-macOS-AppleSilicon.dmg
+
+      - name: Package macOS Universal DMG
+        run: |
+          mkdir -p AppUniv.app/Contents/MacOS
+          lipo -create target/x86_64-apple-darwin/release/nexivora-desktop target/aarch64-apple-darwin/release/nexivora-desktop -output AppUniv.app/Contents/MacOS/Nexivora
+          hdiutil create -volname Nexivora -srcfolder AppUniv.app -ov -format UDZO Nexivora-macOS-Universal.dmg
+
+      - name: Generate Checksums
+        run: |
+          shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
+          shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
+          shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-artifacts
+          path: |
+            Nexivora-macOS-Intel.dmg
+            Nexivora-macOS-Intel.dmg.sha256
+            Nexivora-macOS-AppleSilicon.dmg
+            Nexivora-macOS-AppleSilicon.dmg.sha256
+            Nexivora-macOS-Universal.dmg
+            Nexivora-macOS-Universal.dmg.sha256
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: all-artifacts
+          merge-multiple: true
 
-      - name: Display structure of downloaded files
-        run: ls -R artifacts/
+      - name: Consolidate SHA256SUMS
+        run: |
+          cd all-artifacts
+          cat *.sha256 > SHA256SUMS
+          ls -la
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish Release to GitHub
+        uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
+          tag_name: ${{ github.ref_name }}
+          name: Nexivora Release ${{ github.ref_name }}
           draft: false
           prerelease: false
-
-      - name: Upload Release Assets
-        uses: actions/upload-release-asset@v1
+          files: |
+            all-artifacts/Nexivora-Windows-x64.exe
+            all-artifacts/Nexivora-Windows-x64.exe.sha256
+            all-artifacts/Nexivora-Windows-Portable.zip
+            all-artifacts/Nexivora-Windows-Portable.zip.sha256
+            all-artifacts/Nexivora-Linux-x86_64.AppImage
+            all-artifacts/Nexivora-Linux-x86_64.AppImage.sha256
+            all-artifacts/nexivora-amd64.deb
+            all-artifacts/nexivora-amd64.deb.sha256
+            all-artifacts/nexivora-x86_64.rpm
+            all-artifacts/nexivora-x86_64.rpm.sha256
+            all-artifacts/Nexivora-macOS-Intel.dmg
+            all-artifacts/Nexivora-macOS-Intel.dmg.sha256
+            all-artifacts/Nexivora-macOS-AppleSilicon.dmg
+            all-artifacts/Nexivora-macOS-AppleSilicon.dmg.sha256
+            all-artifacts/Nexivora-macOS-Universal.dmg
+            all-artifacts/Nexivora-macOS-Universal.dmg.sha256
+            all-artifacts/SHA256SUMS
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-linux-x86_64/Nexivora-Linux-x86_64.AppImage
-          asset_name: Nexivora-Linux-x86_64.AppImage
-          asset_content_type: application/octet-stream
-
-      - name: Upload Linux Checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-linux-x86_64/Nexivora-Linux-x86_64.AppImage.sha256
-          asset_name: Nexivora-Linux-x86_64.AppImage.sha256
-          asset_content_type: text/plain
-
-      - name: Upload macOS Intel
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-macos-intel/Nexivora-macOS-Intel.dmg
-          asset_name: Nexivora-macOS-Intel.dmg
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS Intel Checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-macos-intel/Nexivora-macOS-Intel.dmg.sha256
-          asset_name: Nexivora-macOS-Intel.dmg.sha256
-          asset_content_type: text/plain
-
-      - name: Upload macOS Apple Silicon
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-macos-apple-silicon/Nexivora-macOS-AppleSilicon.dmg
-          asset_name: Nexivora-macOS-AppleSilicon.dmg
-          asset_content_type: application/octet-stream
-
-      - name: Upload macOS Apple Silicon Checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-macos-apple-silicon/Nexivora-macOS-AppleSilicon.dmg.sha256
-          asset_name: Nexivora-macOS-AppleSilicon.dmg.sha256
-          asset_content_type: text/plain
-
-      - name: Upload Windows
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-windows-x64/Nexivora-Windows-x64.exe
-          asset_name: Nexivora-Windows-x64.exe
-          asset_content_type: application/octet-stream
-
-      - name: Upload Windows Checksum
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/nexivora-windows-x64/Nexivora-Windows-x64.exe.sha256
-          asset_name: Nexivora-Windows-x64.exe.sha256
-          asset_content_type: text/plain

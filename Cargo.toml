@@ -17,6 +17,7 @@ members = [
     "crates/automation",
     "crates/plugin-system",
     "crates/security",
+    "apps/desktop",
 ]
 
 [workspace.package]
@@ -24,9 +25,9 @@ version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
 authors = ["Nexivora Contributors"]
-repository = "https://github.com/nexivora/nexivora"
-homepage = "https://github.com/nexivora/nexivora"
-documentation = "https://github.com/nexivora/nexivora/blob/main/docs/README.md"
+repository = "https://github.com/zypherlabs-bit/NEXIVORA"
+homepage = "https://github.com/zypherlabs-bit/NEXIVORA"
+documentation = "https://github.com/zypherlabs-bit/NEXIVORA/blob/main/docs/README.md"
 keywords = ["office", "productivity", "spreadsheet", "document", "presentation"]
 categories = ["command-line-utilities", "development-tools"]
 

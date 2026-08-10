@@ -46,4 +46,4 @@ When the security team receives a security bug report, they will assign it to a 
 * Confirm the problem and determine the affected versions
 * Audit code to find any potential similar problems
 * Prepare fixes for all releases still under maintenance
-* Prepare a post for the [Nexivora Security Announcements](https://github.com/nexivora/nexivora/security/advisories) repository
+* Prepare a post for the [Nexivora Security Announcements](https://github.com/zypherlabs-bit/NEXIVORA/security/advisories) repository
