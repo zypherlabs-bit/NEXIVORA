@@ -1,36 +1,30 @@
 {
+  "productName": "Nexivora",
+  "version": "0.1.0",
+  "identifier": "com.nexivora.desktop",
   "build": {
-    "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "devPath": "../dist",
-    "distDir": "../dist"
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "./dist"
   },
-  "package": {
-    "productName": "nexivora",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "bundle": {
-      "active": true,
-      "targets": ["default"],
-      "identifier": "com.nexivora.desktop",
-      "icons": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ]
-    },
-    "allowlist": {
-      "all": true
-    },
+  "app": {
     "windows": [
       {
         "title": "Nexivora",
         "width": 800,
         "height": 600
       }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
     ]
   }
 }

@@ -1,31 +1,20 @@
-use std::io::{self, Write};
+#![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
-const VERSION: &str = "0.1.0";
-const APP_NAME: &str = "Nexivora Office Suite";
-const REPO: &str = "https://github.com/zypherlabs-bit/NEXIVORA";
+use tauri::Manager;
 
 fn main() {
-    let stdout = io::stdout();
-    let mut out = stdout.lock();
+    tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![greet])
+        .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+            window.show().unwrap();
+            Ok(())
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running tauri application");
+}
 
-    writeln!(out, "╔══════════════════════════════════════════════════════╗").unwrap();
-    writeln!(out, "║          Nexivora Office Suite  v{}              ║", VERSION).unwrap();
-    writeln!(out, "║     Free, open-source, privacy-first productivity    ║").unwrap();
-    writeln!(out, "╚══════════════════════════════════════════════════════╝").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "  Platform:    {}", std::env::consts::OS).unwrap();
-    writeln!(out, "  Repository:  {}", REPO).unwrap();
-    writeln!(out, "  License:     AGPL-3.0-or-later").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "  Engines:").unwrap();
-    writeln!(out, "    📝  Document Engine   — rich text editing").unwrap();
-    writeln!(out, "    📊  Spreadsheet       — 100+ formula functions").unwrap();
-    writeln!(out, "    🎨  Presentation      — slides & transitions").unwrap();
-    writeln!(out, "    🗄️   Database          — local data management").unwrap();
-    writeln!(out).unwrap();
-    writeln!(out, "  {} started successfully.", APP_NAME).unwrap();
-    writeln!(out, "  For usage, visit: {}", REPO).unwrap();
-
-    // Keep the process running briefly so it's visible as a working application
-    std::thread::sleep(std::time::Duration::from_millis(200));
+#[tauri::command]
+fn greet(name: &str) -> String {
+    format!("Hello, {}! You've been greeted from Nexivora!", name)
 }

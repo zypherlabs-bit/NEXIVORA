@@ -1,2 +1,3 @@
-// No build script needed — standalone binary.
-fn main() {}
+fn main() {
+    tauri_build::build()
+}
