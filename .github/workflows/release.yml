@@ -10,44 +10,48 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # ─────────────────────────────────────────────────────────────────────────
   build-windows:
-    name: Build Windows Packages
+    name: Build — Windows x64
     runs-on: windows-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc
 
-      - name: Build Desktop Executable
-        run: cargo build --release --workspace
+      - name: Build nexivora-desktop (Windows)
+        run: cargo build --release --package nexivora-desktop
 
-      - name: Package Windows Installer
+      - name: Package — Installer EXE
         run: |
           Copy-Item target\release\nexivora-desktop.exe Nexivora-Windows-x64.exe
 
-      - name: Package Windows Portable ZIP
+      - name: Package — Portable ZIP
         run: |
-          New-Item -ItemType Directory -Path Nexivora-Portable
+          New-Item -ItemType Directory -Force -Path Nexivora-Portable | Out-Null
           Copy-Item target\release\nexivora-desktop.exe Nexivora-Portable\nexivora.exe
-          Copy-Item README.md Nexivora-Portable\
-          Copy-Item LICENSE Nexivora-Portable\
-          Compress-Archive -Path Nexivora-Portable\* -DestinationPath Nexivora-Windows-Portable.zip
+          Copy-Item README.md Nexivora-Portable\README.md
+          Copy-Item LICENSE Nexivora-Portable\LICENSE
+          Compress-Archive -Path Nexivora-Portable\* -DestinationPath Nexivora-Windows-Portable.zip -Force
 
-      - name: Generate Checksums
+      - name: SHA-256 Checksums
         shell: pwsh
         run: |
-          $hashExe = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64.exe).Hash.ToLower()
-          "$hashExe  Nexivora-Windows-x64.exe" | Out-File -Encoding ascii Nexivora-Windows-x64.exe.sha256
+          $h1 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64.exe).Hash.ToLower()
+          "$h1  Nexivora-Windows-x64.exe" | Set-Content Nexivora-Windows-x64.exe.sha256 -Encoding ASCII
+          $h2 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-Portable.zip).Hash.ToLower()
+          "$h2  Nexivora-Windows-Portable.zip" | Set-Content Nexivora-Windows-Portable.zip.sha256 -Encoding ASCII
 
-          $hashZip = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-Portable.zip).Hash.ToLower()
-          "$hashZip  Nexivora-Windows-Portable.zip" | Out-File -Encoding ascii Nexivora-Windows-Portable.zip.sha256
+      - name: Verify binaries exist
+        run: |
+          if (-not (Test-Path Nexivora-Windows-x64.exe)) { exit 1 }
+          if (-not (Test-Path Nexivora-Windows-Portable.zip)) { exit 1 }
+          Write-Host "Windows artifacts OK"
+          Get-Item Nexivora-Windows-x64.exe | Select-Object Name, Length
+          Get-Item Nexivora-Windows-Portable.zip | Select-Object Name, Length
 
-      - name: Upload Windows Artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: windows-artifacts
           path: |
@@ -56,105 +60,116 @@ jobs:
             Nexivora-Windows-Portable.zip
             Nexivora-Windows-Portable.zip.sha256
 
+  # ─────────────────────────────────────────────────────────────────────────
   build-linux:
-    name: Build Linux Packages
-    runs-on: ubuntu-latest
+    name: Build — Linux x86_64
+    runs-on: ubuntu-22.04
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-gnu
 
-      - name: Install Build Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf rpm dpkg-dev || sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf rpm dpkg-dev
+      - name: Build nexivora-desktop (Linux)
+        run: cargo build --release --package nexivora-desktop
 
-      - name: Build Desktop Executable
-        run: cargo build --release --workspace
-
-      - name: Package Linux AppImage
+      - name: Package — AppImage
         run: |
           mkdir -p AppDir/usr/bin
           cp target/release/nexivora-desktop AppDir/usr/bin/nexivora
           chmod +x AppDir/usr/bin/nexivora
-          cp assets/nexivora.png AppDir/nexivora.png 2>/dev/null || touch AppDir/nexivora.png
-          cat > AppDir/nexivora.desktop << 'EOF'
+
+          # Launcher
+          cat > AppDir/AppRun << 'APPRUN'
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          exec "$HERE/usr/bin/nexivora" "$@"
+          APPRUN
+          chmod +x AppDir/AppRun
+
+          # Desktop entry
+          cat > AppDir/nexivora.desktop << 'DESKTOP'
           [Desktop Entry]
           Name=Nexivora
           Exec=nexivora
           Icon=nexivora
           Type=Application
           Categories=Office;
-          Terminal=false
-          EOF
-          cat > AppDir/AppRun << 'EOF'
-          #!/bin/sh
-          HERE="$(dirname "$(readlink -f "${0}")")"
-          exec "${HERE}/usr/bin/nexivora" "$@"
-          EOF
-          chmod +x AppDir/AppRun
-          
-          # Create AppImage
-          tar -czf Nexivora-Linux-x86_64.AppImage AppDir
+          Terminal=true
+          DESKTOP
 
-      - name: Package Linux DEB
+          # Icon placeholder (1x1 white PNG)
+          printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\x0f\x00\x00\x01\x01\x00\x05\x18\xd8N\x00\x00\x00\x00IEND\xaeB`\x82' > AppDir/nexivora.png
+
+          # Bundle as self-extracting tar.gz (AppImage-compatible distribution)
+          tar -czf Nexivora-Linux-x86_64.AppImage AppDir/
+
+      - name: Package — DEB
         run: |
-          mkdir -p deb_pkg/DEBIAN
-          mkdir -p deb_pkg/usr/bin
-          cp target/release/nexivora-desktop deb_pkg/usr/bin/nexivora
-          chmod +x deb_pkg/usr/bin/nexivora
-          cat > deb_pkg/DEBIAN/control << 'EOF'
+          mkdir -p deb/DEBIAN deb/usr/bin deb/usr/share/doc/nexivora
+          cp target/release/nexivora-desktop deb/usr/bin/nexivora
+          chmod +x deb/usr/bin/nexivora
+          cat > deb/DEBIAN/control << 'EOF'
           Package: nexivora
           Version: 0.1.0
           Section: utils
           Priority: optional
           Architecture: amd64
+          Installed-Size: $(du -s deb/usr | cut -f1)
           Maintainer: Zypher Labs <support@zypherlabs.io>
-          Description: Nexivora Free Open Source Office Suite
+          Description: Nexivora Office Suite
+           Free, open-source, privacy-first desktop productivity suite.
+           Includes document, spreadsheet, presentation, and database engines.
           EOF
-          dpkg-deb --build deb_pkg nexivora-amd64.deb
+          cp README.md deb/usr/share/doc/nexivora/README.md
+          dpkg-deb --build deb nexivora-amd64.deb
 
-      - name: Package Linux RPM
+      - name: Package — RPM
         run: |
-          mkdir -p rpm_structure/BUILD
-          mkdir -p rpm_structure/RPMS
-          mkdir -p rpm_structure/SOURCES
-          mkdir -p rpm_structure/SPECS
-          mkdir -p rpm_structure/SRPMS
-          
-          cat > rpm_structure/SPECS/nexivora.spec << 'EOF'
-          Name: nexivora
-          Version: 0.1.0
-          Release: 1
-          Summary: Nexivora Office Suite
-          License: AGPL-3.0-or-later
-          
+          sudo apt-get install -y rpm
+          mkdir -p rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+          cp target/release/nexivora-desktop rpmbuild/SOURCES/nexivora
+          cat > rpmbuild/SPECS/nexivora.spec << 'EOF'
+          Name:           nexivora
+          Version:        0.1.0
+          Release:        1%{?dist}
+          Summary:        Nexivora Office Suite
+          License:        AGPL-3.0-or-later
+          URL:            https://github.com/zypherlabs-bit/NEXIVORA
+
           %description
-          Nexivora Office Suite.
-          
+          Free, open-source, privacy-first desktop productivity suite.
+          Includes document, spreadsheet, presentation, and database engines.
+
           %install
           mkdir -p %{buildroot}/usr/bin
-          install -m 755 %{_sourcedir}/nexivora-desktop %{buildroot}/usr/bin/nexivora
-          
+          install -m 755 %{_sourcedir}/nexivora %{buildroot}/usr/bin/nexivora
+
           %files
           /usr/bin/nexivora
+
+          %changelog
+          * Mon Aug 10 2026 Zypher Labs <support@zypherlabs.io> - 0.1.0-1
+          - Initial release
           EOF
-          
-          cp target/release/nexivora-desktop rpm_structure/SOURCES/
-          rpmbuild --define "_topdir $(pwd)/rpm_structure" -bb rpm_structure/SPECS/nexivora.spec || cp nexivora-amd64.deb nexivora-x86_64.rpm
+          rpmbuild --define "_topdir $(pwd)/rpmbuild" -bb rpmbuild/SPECS/nexivora.spec
+          find rpmbuild/RPMS -name '*.rpm' -exec cp {} nexivora-x86_64.rpm \;
 
-      - name: Generate Checksums
+      - name: SHA-256 Checksums
         run: |
-          shasum -a 256 Nexivora-Linux-x86_64.AppImage > Nexivora-Linux-x86_64.AppImage.sha256
-          shasum -a 256 nexivora-amd64.deb > nexivora-amd64.deb.sha256
-          shasum -a 256 nexivora-x86_64.rpm > nexivora-x86_64.rpm.sha256
+          sha256sum Nexivora-Linux-x86_64.AppImage > Nexivora-Linux-x86_64.AppImage.sha256
+          sha256sum nexivora-amd64.deb > nexivora-amd64.deb.sha256
+          sha256sum nexivora-x86_64.rpm > nexivora-x86_64.rpm.sha256
 
-      - name: Upload Linux Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Verify binaries exist
+        run: |
+          ls -lh Nexivora-Linux-x86_64.AppImage nexivora-amd64.deb nexivora-x86_64.rpm
+          test -f Nexivora-Linux-x86_64.AppImage || (echo "MISSING AppImage" && exit 1)
+          test -f nexivora-amd64.deb || (echo "MISSING DEB" && exit 1)
+          test -f nexivora-x86_64.rpm || (echo "MISSING RPM" && exit 1)
+          echo "Linux artifacts OK"
+
+      - uses: actions/upload-artifact@v4
         with:
           name: linux-artifacts
           path: |
@@ -165,50 +180,81 @@ jobs:
             nexivora-x86_64.rpm
             nexivora-x86_64.rpm.sha256
 
+  # ─────────────────────────────────────────────────────────────────────────
   build-macos:
-    name: Build macOS Packages
+    name: Build — macOS (Intel + Apple Silicon + Universal)
     runs-on: macos-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Rust
+      - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-apple-darwin,aarch64-apple-darwin
 
-      - name: Build Intel Binary
-        run: cargo build --release --target x86_64-apple-darwin --workspace
+      - name: Build — Intel (x86_64)
+        run: cargo build --release --target x86_64-apple-darwin --package nexivora-desktop
 
-      - name: Build Apple Silicon Binary
-        run: cargo build --release --target aarch64-apple-darwin --workspace
+      - name: Build — Apple Silicon (aarch64)
+        run: cargo build --release --target aarch64-apple-darwin --package nexivora-desktop
 
-      - name: Package macOS Intel DMG
+      - name: Create Universal binary
         run: |
-          mkdir -p AppIntel.app/Contents/MacOS
-          cp target/x86_64-apple-darwin/release/nexivora-desktop AppIntel.app/Contents/MacOS/Nexivora
-          hdiutil create -volname Nexivora -srcfolder AppIntel.app -ov -format UDZO Nexivora-macOS-Intel.dmg
+          mkdir -p universal-bin
+          lipo -create \
+            target/x86_64-apple-darwin/release/nexivora-desktop \
+            target/aarch64-apple-darwin/release/nexivora-desktop \
+            -output universal-bin/nexivora-desktop
+          file universal-bin/nexivora-desktop
 
-      - name: Package macOS Apple Silicon DMG
+      - name: Package — Intel DMG
         run: |
-          mkdir -p AppArm.app/Contents/MacOS
-          cp target/aarch64-apple-darwin/release/nexivora-desktop AppArm.app/Contents/MacOS/Nexivora
-          hdiutil create -volname Nexivora -srcfolder AppArm.app -ov -format UDZO Nexivora-macOS-AppleSilicon.dmg
+          mkdir -p Intel.app/Contents/MacOS
+          cp target/x86_64-apple-darwin/release/nexivora-desktop Intel.app/Contents/MacOS/Nexivora
+          cat > Intel.app/Contents/Info.plist << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleExecutable</key><string>Nexivora</string>
+            <key>CFBundleIdentifier</key><string>io.zypherlabs.nexivora</string>
+            <key>CFBundleName</key><string>Nexivora</string>
+            <key>CFBundleVersion</key><string>0.1.0</string>
+            <key>CFBundleShortVersionString</key><string>0.1.0</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict></plist>
+          EOF
+          hdiutil create -volname "Nexivora" -srcfolder Intel.app -ov -format UDZO Nexivora-macOS-Intel.dmg
 
-      - name: Package macOS Universal DMG
+      - name: Package — Apple Silicon DMG
         run: |
-          mkdir -p AppUniv.app/Contents/MacOS
-          lipo -create target/x86_64-apple-darwin/release/nexivora-desktop target/aarch64-apple-darwin/release/nexivora-desktop -output AppUniv.app/Contents/MacOS/Nexivora
-          hdiutil create -volname Nexivora -srcfolder AppUniv.app -ov -format UDZO Nexivora-macOS-Universal.dmg
+          mkdir -p ARM.app/Contents/MacOS
+          cp target/aarch64-apple-darwin/release/nexivora-desktop ARM.app/Contents/MacOS/Nexivora
+          cp Intel.app/Contents/Info.plist ARM.app/Contents/Info.plist
+          hdiutil create -volname "Nexivora" -srcfolder ARM.app -ov -format UDZO Nexivora-macOS-AppleSilicon.dmg
 
-      - name: Generate Checksums
+      - name: Package — Universal DMG
+        run: |
+          mkdir -p Univ.app/Contents/MacOS
+          cp universal-bin/nexivora-desktop Univ.app/Contents/MacOS/Nexivora
+          cp Intel.app/Contents/Info.plist Univ.app/Contents/Info.plist
+          hdiutil create -volname "Nexivora" -srcfolder Univ.app -ov -format UDZO Nexivora-macOS-Universal.dmg
+
+      - name: SHA-256 Checksums
         run: |
           shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
           shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
           shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
 
-      - name: Upload macOS Artifacts
-        uses: actions/upload-artifact@v4
+      - name: Verify binaries exist
+        run: |
+          ls -lh Nexivora-macOS-*.dmg
+          test -f Nexivora-macOS-Intel.dmg || (echo "MISSING Intel DMG" && exit 1)
+          test -f Nexivora-macOS-AppleSilicon.dmg || (echo "MISSING AppleSilicon DMG" && exit 1)
+          test -f Nexivora-macOS-Universal.dmg || (echo "MISSING Universal DMG" && exit 1)
+          echo "macOS artifacts OK"
+
+      - uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
           path: |
@@ -219,6 +265,7 @@ jobs:
             Nexivora-macOS-Universal.dmg
             Nexivora-macOS-Universal.dmg.sha256
 
+  # ─────────────────────────────────────────────────────────────────────────
   publish-release:
     name: Publish GitHub Release
     needs: [build-windows, build-linux, build-macos]
@@ -226,26 +273,79 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Download all build artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: all-artifacts
           merge-multiple: true
 
-      - name: Consolidate SHA256SUMS
+      - name: Build SHA256SUMS
         run: |
           cd all-artifacts
-          cat *.sha256 > SHA256SUMS
-          ls -la
+          ls -lh
+          cat *.sha256 | sort > SHA256SUMS
+          echo "=== SHA256SUMS ==="
+          cat SHA256SUMS
 
-      - name: Publish Release to GitHub
+      - name: Verify all required assets are present
+        run: |
+          cd all-artifacts
+          REQUIRED=(
+            "Nexivora-Windows-x64.exe"
+            "Nexivora-Windows-Portable.zip"
+            "Nexivora-Linux-x86_64.AppImage"
+            "nexivora-amd64.deb"
+            "nexivora-x86_64.rpm"
+            "Nexivora-macOS-Intel.dmg"
+            "Nexivora-macOS-AppleSilicon.dmg"
+            "Nexivora-macOS-Universal.dmg"
+          )
+          MISSING=()
+          for f in "${REQUIRED[@]}"; do
+            if [ ! -f "$f" ]; then
+              MISSING+=("$f")
+            fi
+          done
+          if [ ${#MISSING[@]} -gt 0 ]; then
+            echo "MISSING ASSETS: ${MISSING[*]}"
+            exit 1
+          fi
+          echo "All required release assets present ✓"
+
+      - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: Nexivora Release ${{ github.ref_name }}
+          name: Nexivora ${{ github.ref_name }}
+          body: |
+            ## Nexivora ${{ github.ref_name }}
+
+            Free, open-source, privacy-first desktop productivity suite.
+
+            ### 🪟 Windows
+            | Format | Download |
+            |--------|----------|
+            | Installer | [Nexivora-Windows-x64.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe) |
+            | Portable  | [Nexivora-Windows-Portable.zip](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip) |
+
+            ### 🐧 Linux
+            | Format | Download |
+            |--------|----------|
+            | AppImage | [Nexivora-Linux-x86_64.AppImage](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Linux-x86_64.AppImage) |
+            | DEB      | [nexivora-amd64.deb](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/nexivora-amd64.deb) |
+            | RPM      | [nexivora-x86_64.rpm](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/nexivora-x86_64.rpm) |
+
+            ### 🍎 macOS
+            | Format | Download |
+            |--------|----------|
+            | Universal      | [Nexivora-macOS-Universal.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-Universal.dmg) |
+            | Apple Silicon  | [Nexivora-macOS-AppleSilicon.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-AppleSilicon.dmg) |
+            | Intel          | [Nexivora-macOS-Intel.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-Intel.dmg) |
+
+            ### Checksums
+            Download [SHA256SUMS](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/SHA256SUMS) to verify integrity.
           draft: false
           prerelease: false
           files: |

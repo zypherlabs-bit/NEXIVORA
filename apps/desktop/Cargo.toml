@@ -1,35 +1,13 @@
 [package]
 name = "nexivora-desktop"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-authors.workspace = true
-repository.workspace = true
-description = "Tauri desktop shell for Nexivora office suite"
-homepage.workspace = true
-documentation.workspace = true
-keywords.workspace = true
-categories.workspace = true
+version = "0.1.0"
+edition = "2021"
+description = "Nexivora — Free, open-source, cross-platform office suite"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/zypherlabs-bit/NEXIVORA"
+
+[[bin]]
+name = "nexivora-desktop"
+path = "src/main.rs"
 
 [dependencies]
-serde.workspace = true
-serde_json.workspace = true
-log.workspace = true
-env_logger.workspace = true
-anyhow.workspace = true
-tokio.workspace = true
-
-nexivora-core = { path = "../crates/core" }
-nexivora-spreadsheet-engine = { path = "../crates/spreadsheet-engine" }
-nexivora-document-engine = { path = "../crates/document-engine" }
-
-[build-dependencies]
-tauri-build = { version = "^1.5", features = ["tauri"] }
-
-[dependencies.tauri]
-version = "^1.5"
-default-features = false
-features = ["api-all"]
-
-[features]
-default = []
