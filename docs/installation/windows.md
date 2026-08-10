@@ -21,15 +21,15 @@
 ### Standard Installer
 
 1. **Download** the latest Windows installer from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
-2. **Run** the installer (e.g., `Nexivora-1.0.0-Windows-x64.exe`)
+2. **Run** the installer (e.g., `Nexivora-Windows-x64-setup.exe`)
 3. **Follow** the installation wizard instructions
 4. **Launch** Nexivora from the Start Menu or desktop shortcut
 
 ### Portable Version
 
-1. **Download** the portable ZIP archive from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
+1. **Download** the portable ZIP archive `Nexivora-Windows-Portable.zip` from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
 2. **Extract** the ZIP file to your preferred location
-3. **Run** `nexivora.exe` from the extracted folder
+3. **Run** `Nexivora.exe` from the extracted folder
 4. No installation required - runs directly from the folder
 
 ## Verification
@@ -39,17 +39,22 @@
 After downloading, verify the integrity of the installer:
 
 1. Open PowerShell
-2. Run: `Get-FileHash -Algorithm SHA256 Nexivora-1.0.0-Windows-x64.exe`
-3. Compare the output with the SHA-256 checksum listed in the release notes
+2. Run: `Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64-setup.exe`
+3. Compare the output with the SHA-256 checksum listed in the release notes (the `.sha256` file next to the binary download on the GitHub Release page)
 
 ### Digital Signature
 
-Nexivora installers are digitally signed. You can verify the signature:
+Code signing for Nexivora installers is applied when a legitimate Authenticode (Windows), Developer ID (macOS), or GPG (Linux) certificate is configured in the repository's secure secrets. 
 
+To verify the signature of a signed Windows binary:
 1. Right-click the installer file
 2. Select "Properties"
 3. Go to the "Digital Signatures" tab
-4. Verify the signature is valid and from "Nexivora Project"
+4. Verify the signature is valid and the publisher identity matches the release description
+
+If the "Digital Signatures" tab is not present, the build was produced without a configured signing certificate (typical for community OSS releases). In that case, rely on SHA-256 checksum verification to confirm the file has not been tampered with.
+
+> Note: Neither Microsoft, Apple, nor any Linux distribution officially endorses or has approved Nexivora unless explicitly stated by those vendors. First-run SmartScreen/Gatekeeper warnings for unsigned or recently signed applications are normal for new open-source projects with limited reputation history.
 
 ## Troubleshooting
 

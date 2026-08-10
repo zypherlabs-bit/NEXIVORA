@@ -5,6 +5,15 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to create/update (e.g. v0.1.0)'
+        required: false
+        default: 'v0.1.0'
+      prerelease:
+        description: 'Mark as prerelease'
+        type: boolean
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -390,52 +399,90 @@ jobs:
           fi
           echo "All required release assets present ✓"
 
+      - name: Determine release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${{ github.ref_name }}"
+          else
+            TAG="${{ github.event.inputs.release_tag }}"
+            if [ -z "$TAG" ]; then
+              TAG="v0.1.0"
+            fi
+          fi
+          echo "Release tag: $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure tag exists on current commit (workflow_dispatch path)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG="${{ steps.tag.outputs.tag }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Force move tag to the commit the workflow is running on
+          git tag -f "$TAG" HEAD
+          git push -f origin "$TAG"
+
       - name: Publish to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
-          name: Nexivora ${{ github.ref_name }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Nexivora ${{ steps.tag.outputs.tag }}
+          fail_on_unmatched_files: true
           body: |
-            ## Nexivora ${{ github.ref_name }}
+            ## Nexivora ${{ steps.tag.outputs.tag }}
 
             Free, open-source, privacy-first desktop productivity suite.
+
+            ### Commit
+            Built from commit `${{ github.sha }}` on `${{ github.event_name }}` trigger.
 
             ### 🪟 Windows
             | Format | Download |
             |--------|----------|
-            | Portable EXE | [Nexivora-Windows-x64.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe) |
-            | MSI Installer | [Nexivora-Windows-x64.msi](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.msi) |
-            | NSIS Setup | [Nexivora-Windows-x64-setup.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64-setup.exe) |
-            | Portable ZIP | [Nexivora-Windows-Portable.zip](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip) |
+            | Portable EXE | [Nexivora-Windows-x64.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-Windows-x64.exe) |
+            | MSI Installer | [Nexivora-Windows-x64.msi](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-Windows-x64.msi) |
+            | NSIS Setup | [Nexivora-Windows-x64-setup.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-Windows-x64-setup.exe) |
+            | Portable ZIP | [Nexivora-Windows-Portable.zip](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-Windows-Portable.zip) |
 
             ### 🐧 Linux
             | Format | Download |
             |--------|----------|
-            | AppImage | [Nexivora-Linux-x86_64.AppImage](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Linux-x86_64.AppImage) |
-            | DEB      | [nexivora-amd64.deb](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/nexivora-amd64.deb) |
-            | RPM      | [nexivora-x86_64.rpm](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/nexivora-x86_64.rpm) |
+            | AppImage | [Nexivora-Linux-x86_64.AppImage](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-Linux-x86_64.AppImage) |
+            | DEB      | [nexivora-amd64.deb](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/nexivora-amd64.deb) |
+            | RPM      | [nexivora-x86_64.rpm](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/nexivora-x86_64.rpm) |
 
             ### 🍎 macOS
             | Format | Download |
             |--------|----------|
-            | Universal      | [Nexivora-macOS-Universal.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-Universal.dmg) |
-            | Apple Silicon  | [Nexivora-macOS-AppleSilicon.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-AppleSilicon.dmg) |
-            | Intel          | [Nexivora-macOS-Intel.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-macOS-Intel.dmg) |
+            | Universal      | [Nexivora-macOS-Universal.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-macOS-Universal.dmg) |
+            | Apple Silicon  | [Nexivora-macOS-AppleSilicon.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-macOS-AppleSilicon.dmg) |
+            | Intel          | [Nexivora-macOS-Intel.dmg](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/Nexivora-macOS-Intel.dmg) |
 
             ### Checksums
-            Download [SHA256SUMS](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/SHA256SUMS) to verify integrity.
+            Download [SHA256SUMS](https://github.com/zypherlabs-bit/NEXIVORA/releases/download/${{ steps.tag.outputs.tag }}/SHA256SUMS) to verify integrity.
 
             ```bash
             # Example:
             sha256sum -c SHA256SUMS --ignore-missing
             ```
 
-            ### Code Signing Status
-            - **Windows**: Authenticode signing is applied when a valid PFX certificate is configured in repository secrets. If the SmartScreen warning appears, it means the binary has not yet built reputation. This is normal for new OSS applications.
-            - **macOS**: Developer ID + notarization is applied when valid Apple Developer credentials are configured in repository secrets. If Gatekeeper shows a warning, right-click → Open once, or the app was signed without notarization.
-            - **Linux**: GPG signing of DEB/RPM packages is applied when valid GPG keys are configured in repository secrets. AppImage includes SHA-256 checksum verification.
+            ### Windows Startup Crash Fix (this release)
+            - Root cause fixed: the window `"label"` field was missing from `tauri.conf.json` and `get_webview_window("main").unwrap()` caused an immediate panic on launch
+            - Graceful window lookup with `if let Some(window)` + `eprintln!` instead of `.unwrap()` panic
+            - Corrected Tauri 2 permission names in `capabilities/default.json`
+            - Added missing `tauri-plugin-fs` and `tauri-plugin-dialog` plugin initialization
+
+            ### Code Signing Status (actual)
+            - **Windows**: Authenticode signing via signtool is applied **if** a valid PFX certificate + password are configured in repository secrets (`WINDOWS_PFX_BASE64`, `WINDOWS_PFX_PASSWORD`). If the SmartScreen warning appears on first run, the binary has not yet built reputation with Microsoft Defender SmartScreen — this is normal for new open-source applications that do not yet have an EV code-signing certificate.
+            - **macOS**: Developer ID signing + Apple notarization is applied **if** valid Apple Developer credentials are configured in repository secrets (`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_P12_BASE64`, `APPLE_P12_PASSWORD`, `APPLE_KEYCHAIN_PASSWORD`). If Gatekeeper shows a warning, right-click the app → Open once, or visit System Settings → Privacy & Security → "Open Anyway".
+            - **Linux**: GPG signing of DEB/RPM packages is applied **if** valid GPG private key + passphrase are configured in repository secrets (`LINUX_GPG_PRIVATE_KEY`, `LINUX_GPG_PASSPHRASE`). All Linux artifacts always include SHA-256 checksum sidecar files for independent integrity verification.
+
+            **Important**: Neither Microsoft, Apple, nor any Linux distribution has officially endorsed, certified, or approved Nexivora. No vendor claims are made or implied.
           draft: false
-          prerelease: false
+          prerelease: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.prerelease == 'true' }}
+          overwrite: true
+          generate_release_notes: false
           files: |
             all-artifacts/Nexivora-Windows-x64.exe
             all-artifacts/Nexivora-Windows-x64.exe.sha256
