@@ -72,7 +72,7 @@ jobs:
             $signCmd = "signtool sign /fd SHA256 /sha1 $env:WINDOWS_CERT_THUMBPRINT /tr http://timestamp.digicert.com /td SHA256 `"`%1`""
             $env:TAURI_WINDOWS_SIGN_COMMAND = $signCmd
           }
-          npm run tauri build -- --bundles exe,msi,nsis
+          npm run tauri build -- --bundles msi,nsis
 
       - name: Package — Portable ZIP
         shell: pwsh
