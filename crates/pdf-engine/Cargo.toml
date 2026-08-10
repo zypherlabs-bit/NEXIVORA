@@ -1,0 +1,8 @@
+[package]
+name = "nexivora-pdf-engine"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Nexivora PDF Engine"
+[dependencies]
+nexivora-core = { path = "../core" }

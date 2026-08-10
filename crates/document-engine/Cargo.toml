@@ -1,0 +1,12 @@
+[package]
+name = "nexivora-document-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Nexivora Document Engine"
+
+[dependencies]
+nexivora-core = { path = "../core" }
+serde.workspace = true

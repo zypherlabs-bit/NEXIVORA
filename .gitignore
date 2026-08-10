@@ -1,0 +1,68 @@
+# Rust
+**/target/
+**/*.rs.bk
+
+# Cargo
+.cargo/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.o
+*.obj
+
+# AppImage
+*.AppImage
+
+# DMG
+*.dmg
+
+# Installers
+*.msi
+*.deb
+*.rpm
+
+# Documentation build
+**/docs/_build/
+
+# Test results
+**/test-results/
+
+# Coverage
+**/coverage/
+
+# Temporary files
+*.tmp
+*.bak
+
+# Cache
+**/node_modules/
+**/.cache/
+
+# Secrets (should never be committed)
+*.pem
+*.key
+*.secret
+*.token

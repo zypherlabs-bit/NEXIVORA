@@ -1,0 +1,14 @@
+[package]
+name = "nexivora-spreadsheet-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Nexivora Spreadsheet Engine"
+
+[dependencies]
+nexivora-core = { path = "../core" }
+nexivora-formula-engine = { path = "../formula-engine" }
+serde.workspace = true
+rust_decimal.workspace = true

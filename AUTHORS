@@ -1,0 +1,39 @@
+# Nexivora Authors
+
+Nexivora is developed by a community of contributors. This file lists the people who have contributed to the project.
+
+## Core Team
+
+- Your Name <your.email@example.com> (Project Lead)
+- [Add core team members here]
+
+## Contributors
+
+- [Add contributors here in alphabetical order]
+
+## How to Add Yourself
+
+If you've made significant contributions to Nexivora and would like to be listed as an author:
+
+1. Make sure you have at least 5 non-trivial contributions
+2. Open a pull request adding yourself to this file
+3. Follow the existing format
+4. Keep the list in alphabetical order by first name
+
+## Contribution Types
+
+Contributions that qualify for authorship include:
+- Code contributions (features, bug fixes, improvements)
+- Documentation (tutorials, guides, API docs)
+- Design (UI/UX, graphics, themes)
+- Localization (translations)
+- Significant bug reports with detailed analysis
+- Project infrastructure improvements
+
+## Recognition
+
+All contributors are valued members of the Nexivora community. Whether you're listed here or not, your contributions help make Nexivora better for everyone!
+
+For a complete list of contributors, see:
+- [GitHub Contributors](https://github.com/nexivora/nexivora/graphs/contributors)
+- [Git Commit History](https://github.com/nexivora/nexivora/commits/main)
