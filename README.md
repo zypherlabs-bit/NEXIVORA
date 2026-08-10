@@ -14,19 +14,21 @@ Nexivora is available for Windows, Linux, and macOS. Choose your platform:
 
 | Format | Architecture | Download | Checksum |
 |--------|--------------|----------|----------|
-| **Installer** | x64 | [Nexivora-Windows-x64.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe.sha256) |
-| **Portable** | x64 | [Nexivora-Windows-Portable.zip](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip.sha256) |
+| **NSIS Setup** | x64 | [Nexivora-Windows-x64-setup.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64-setup.exe) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64-setup.exe.sha256) |
+| **MSI Installer** | x64 | [Nexivora-Windows-x64.msi](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.msi) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.msi.sha256) |
+| **Portable EXE** | x64 | [Nexivora-Windows-x64.exe](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe.sha256) |
+| **Portable ZIP** | x64 | [Nexivora-Windows-Portable.zip](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip) | [SHA256](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-Portable.zip.sha256) |
 
 **Supported Versions**: Windows 10 (64-bit) and Windows 11
 
 **Installation**:
 ```powershell
-# Download and verify
-Invoke-WebRequest -Uri "https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64.exe" -OutFile "Nexivora-Installer.exe"
-Get-FileHash -Algorithm SHA256 "Nexivora-Installer.exe"
+# Download and verify NSIS installer
+Invoke-WebRequest -Uri "https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/Nexivora-Windows-x64-setup.exe" -OutFile "Nexivora-Setup.exe"
+Get-FileHash -Algorithm SHA256 "Nexivora-Setup.exe"
 
 # Install
-Start-Process -FilePath ".\Nexivora-Installer.exe" -Wait
+Start-Process -FilePath ".\Nexivora-Setup.exe" -Wait
 ```
 
 [📖 Windows Installation Guide](docs/installation/windows.md)
