@@ -6,19 +6,95 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
 jobs:
-  build:
+  lint-and-test:
+    name: Lint & Test (workspace)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Rust stable
+
+      - name: Install Rust stable with components
         uses: dtolnay/rust-toolchain@stable
-      - name: Cache Cargo
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and target
         uses: actions/cache@v4
         with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.toml') }}
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.toml') }}
+            ${{ runner.os }}-cargo-ci-
+
+      - name: Install Node.js (for Tauri CLI + package lock)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (lints)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Build
         run: cargo build --workspace --verbose
+
       - name: Test
         run: cargo test --workspace --verbose
+
+  build-windows-quick:
+    name: Quick Windows build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/desktop/target
+          key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-desktop-
+
+      - name: Build Nexivora desktop (release, no bundle)
+        working-directory: apps/desktop
+        run: npm run tauri build -- --no-bundle
+
+      - name: Verify binary was produced
+        shell: pwsh
+        run: |
+          $bin = "apps/desktop/target/release/nexivora-desktop.exe"
+          if (-not (Test-Path $bin)) {
+            Write-Host "ERROR: Missing $bin"
+            exit 1
+          }
+          Get-Item $bin | Select-Object Name, Length, LastWriteTime
+          Write-Host "OK: Desktop binary compiled successfully"

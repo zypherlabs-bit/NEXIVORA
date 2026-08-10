@@ -1,0 +1,14 @@
+{
+  "name": "nexivora",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nexivora — Free, open-source, cross-platform office suite",
+  "license": "AGPL-3.0-or-later",
+  "repository": "https://github.com/zypherlabs-bit/NEXIVORA",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

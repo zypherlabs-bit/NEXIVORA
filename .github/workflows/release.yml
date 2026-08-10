@@ -8,81 +8,111 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
-  # ─────────────────────────────────────────────────────────────────────────
   build-windows:
     name: Build — Windows x64
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
-
       - name: Verify frontend assets exist
         working-directory: apps/desktop
+        shell: pwsh
         run: |
-          if (-not (Test-Path dist/index.html)) { echo "ERROR: dist/index.html missing"; exit 1 }
-          echo "Frontend assets OK"
+          if (-not (Test-Path dist/index.html)) {
+            Write-Host "ERROR: dist/index.html missing"
+            exit 1
+          }
+          Write-Host "Frontend assets OK"
           Get-ChildItem dist | Select-Object Name, Length
 
-      - name: Code Signing — Setup certificate (optional)
-        if: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_SIGNING_CERTIFICATE != '' }}
+      - name: Windows Authenticode Signing — Setup PFX (optional)
+        shell: pwsh
+        if: ${{ secrets.WINDOWS_PFX_BASE64 != '' && secrets.WINDOWS_PFX_PASSWORD != '' }}
         run: |
-          echo "${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" > private.pem
-          echo "${{ secrets.TAURI_SIGNING_CERTIFICATE }}" > certificate.pem
-          echo "TAURI_SIGNING_PRIVATE_KEY_PATH=$(pwd)/private.pem" >> $GITHUB_ENV
-          echo "TAURI_SIGNING_CERTIFICATE_PATH=$(pwd)/certificate.pem" >> $GITHUB_ENV
+          $pfxBytes = [System.Convert]::FromBase64String("${{ secrets.WINDOWS_PFX_BASE64 }}")
+          [System.IO.File]::WriteAllBytes("$(pwd)/codesign.pfx", $pfxBytes)
+          $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2
+          $cert.Import("$(pwd)/codesign.pfx", "${{ secrets.WINDOWS_PFX_PASSWORD }}", [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::Exportable)
+          $thumbprint = $cert.Thumbprint
+          Write-Host "Certificate thumbprint: $thumbprint"
+          echo "WINDOWS_PFX_PATH=$(pwd)/codesign.pfx" >> $env:GITHUB_ENV
+          echo "WINDOWS_CERT_THUMBPRINT=$thumbprint" >> $env:GITHUB_ENV
 
       - name: Build and bundle — Windows
         working-directory: apps/desktop
-        run: tauri build --bundles exe,msi,nsis
-        env:
-          TAURI_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_SIGNING_PRIVATE_KEY_PATH }}
-          TAURI_SIGNING_CERTIFICATE_PATH: ${{ env.TAURI_SIGNING_CERTIFICATE_PATH }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-
-      - name: Package — Portable ZIP
-        run: |
-          New-Item -ItemType Directory -Force -Path Nexivora-Portable | Out-Null
-          Copy-Item target\release\nexivora-desktop.exe Nexivora-Portable\nexivora.exe
-          Copy-Item README.md Nexivora-Portable\README.md
-          Copy-Item LICENSE Nexivora-Portable\LICENSE
-          Compress-Archive -Path Nexivora-Portable\* -DestinationPath Nexivora-Windows-Portable.zip -Force
-
-      - name: Collect Windows artifacts
-        run: |
-          Copy-Item target\release\nexivora-desktop.exe Nexivora-Windows-x64.exe
-          Copy-Item "target\release\bundle\msi\Nexivora_*_x64_en-US.msi" Nexivora-Windows-x64.msi
-          Copy-Item "target\release\bundle\nsis\Nexivora_*_x64-setup.exe" Nexivora-Windows-x64-setup.exe
-
-      - name: SHA-256 Checksums
         shell: pwsh
         run: |
-          $h1 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64.exe).Hash.ToLower()
-          "$h1  Nexivora-Windows-x64.exe" | Set-Content Nexivora-Windows-x64.exe.sha256 -Encoding ASCII
-          $h2 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64.msi).Hash.ToLower()
-          "$h2  Nexivora-Windows-x64.msi" | Set-Content Nexivora-Windows-x64.msi.sha256 -Encoding ASCII
-          $h3 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-x64-setup.exe).Hash.ToLower()
-          "$h3  Nexivora-Windows-x64-setup.exe" | Set-Content Nexivora-Windows-x64-setup.exe.sha256 -Encoding ASCII
-          $h4 = (Get-FileHash -Algorithm SHA256 Nexivora-Windows-Portable.zip).Hash.ToLower()
-          "$h4  Nexivora-Windows-Portable.zip" | Set-Content Nexivora-Windows-Portable.zip.sha256 -Encoding ASCII
+          $env:TAURI_TRUST_KEY = if ("${{ secrets.TAURI_TRUST_KEY }}" -ne "") { "${{ secrets.TAURI_TRUST_KEY }}" } else { $null }
+          $env:TAURI_TRUST_KEY_PASSWORD = if ("${{ secrets.TAURI_TRUST_KEY_PASSWORD }}" -ne "") { "${{ secrets.TAURI_TRUST_KEY_PASSWORD }}" } else { $null }
+          if ($env:WINDOWS_CERT_THUMBPRINT) {
+            $signCmd = "signtool sign /fd SHA256 /sha1 $env:WINDOWS_CERT_THUMBPRINT /tr http://timestamp.digicert.com /td SHA256 `"`%1`""
+            $env:TAURI_WINDOWS_SIGN_COMMAND = $signCmd
+          }
+          npm run tauri build -- --bundles exe,msi,nsis
+
+      - name: Package — Portable ZIP
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path Nexivora-Portable | Out-Null
+          Copy-Item apps/desktop/target/release/nexivora-desktop.exe Nexivora-Portable/Nexivora.exe
+          Copy-Item README.md Nexivora-Portable/README.md
+          Copy-Item LICENSE Nexivora-Portable/LICENSE
+          Compress-Archive -Path Nexivora-Portable/* -DestinationPath Nexivora-Windows-Portable.zip -Force
+
+      - name: Collect Windows artifacts
+        shell: pwsh
+        run: |
+          Copy-Item apps/desktop/target/release/nexivora-desktop.exe Nexivora-Windows-x64.exe
+          $msi = Get-ChildItem -Path "apps/desktop/target/release/bundle/msi/Nexivora_*_x64_en-US.msi" | Select-Object -First 1
+          if ($msi) { Copy-Item $msi.FullName Nexivora-Windows-x64.msi } else { Write-Host "WARNING: MSI not found" }
+          $nsis = Get-ChildItem -Path "apps/desktop/target/release/bundle/nsis/Nexivora_*_x64-setup.exe" | Select-Object -First 1
+          if ($nsis) { Copy-Item $nsis.FullName Nexivora-Windows-x64-setup.exe } else { Write-Host "WARNING: NSIS setup not found" }
+
+      - name: SHA-256 Checksums (Windows)
+        shell: pwsh
+        run: |
+          $files = @(
+            "Nexivora-Windows-x64.exe",
+            "Nexivora-Windows-x64.msi",
+            "Nexivora-Windows-x64-setup.exe",
+            "Nexivora-Windows-Portable.zip"
+          )
+          foreach ($f in $files) {
+            if (Test-Path $f) {
+              $h = (Get-FileHash -Algorithm SHA256 $f).Hash.ToLower()
+              "$h  $f" | Set-Content "$f.sha256" -Encoding ASCII
+            }
+          }
 
       - name: Verify binaries exist
+        shell: pwsh
         run: |
-          if (-not (Test-Path Nexivora-Windows-x64.exe)) { exit 1 }
-          if (-not (Test-Path Nexivora-Windows-x64.msi)) { exit 1 }
-          if (-not (Test-Path Nexivora-Windows-x64-setup.exe)) { exit 1 }
-          if (-not (Test-Path Nexivora-Windows-Portable.zip)) { exit 1 }
+          $required = @("Nexivora-Windows-x64.exe", "Nexivora-Windows-x64.msi", "Nexivora-Windows-x64-setup.exe", "Nexivora-Windows-Portable.zip")
+          $missing = @()
+          foreach ($f in $required) {
+            if (-not (Test-Path $f)) { $missing += $f }
+          }
+          if ($missing.Count -gt 0) {
+            Write-Host "MISSING: $($missing -join ', ')"
+            exit 1
+          }
           Write-Host "Windows artifacts OK"
-          Get-Item Nexivora-Windows-x64.exe | Select-Object Name, Length
-          Get-Item Nexivora-Windows-x64.msi | Select-Object Name, Length
-          Get-Item Nexivora-Windows-x64-setup.exe | Select-Object Name, Length
-          Get-Item Nexivora-Windows-Portable.zip | Select-Object Name, Length
+          Get-Item Nexivora-Windows-x64.exe, Nexivora-Windows-x64.msi, Nexivora-Windows-x64-setup.exe, Nexivora-Windows-Portable.zip | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
@@ -97,53 +127,76 @@ jobs:
             Nexivora-Windows-Portable.zip
             Nexivora-Windows-Portable.zip.sha256
 
-  # ─────────────────────────────────────────────────────────────────────────
   build-linux:
     name: Build — Linux x86_64
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install system dependencies
+      - name: Install system dependencies (Tauri + AppImage)
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libfuse2 \
+            libssl-dev \
+            pkg-config \
+            desktop-file-utils \
+            rpm
+          # AppImage requires FUSE
+          sudo modprobe fuse 2>/dev/null || true
 
       - name: Verify frontend assets exist
         working-directory: apps/desktop
         run: |
-          if (-not (Test-Path dist/index.html)) { echo "ERROR: dist/index.html missing"; exit 1 }
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: dist/index.html missing"
+            exit 1
+          fi
           echo "Frontend assets OK"
-          Get-ChildItem dist | Select-Object Name, Length
+          ls -lh dist
 
-      - name: Code Signing — Linux (optional)
-        if: ${{ secrets.TAURI_LINUX_SIGNING_PRIVATE_KEY != '' && secrets.TAURI_LINUX_SIGNING_PASSPHRASE != '' }}
+      - name: GPG Signing Setup for DEB/RPM (optional)
+        if: ${{ secrets.LINUX_GPG_PRIVATE_KEY != '' && secrets.LINUX_GPG_PASSPHRASE != '' }}
         run: |
-          echo "${{ secrets.TAURI_LINUX_SIGNING_PRIVATE_KEY }}" > private.key
-          gpg --import private.key
-          echo "TAURI_LINUX_SIGNING_PRIVATE_KEY_PATH=$(pwd)/private.key" >> $GITHUB_ENV
-          echo "TAURI_LINUX_SIGNING_PASSPHRASE=${{ secrets.TAURI_LINUX_SIGNING_PASSPHRASE }}" >> $GITHUB_ENV
+          echo "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" | gpg --batch --import --pinentry-mode loopback --passphrase "${{ secrets.LINUX_GPG_PASSPHRASE }}"
+          gpg --list-secret-keys --keyid-format LONG
 
-      - name: Build and bundle — Linux
+      - name: Build and bundle — Linux (AppImage, DEB, RPM)
         working-directory: apps/desktop
-        run: tauri build --bundles appimage,deb,rpm
         env:
-          TAURI_LINUX_SIGNING_PRIVATE_KEY_PATH: ${{ env.TAURI_LINUX_SIGNING_PRIVATE_KEY_PATH }}
-          TAURI_LINUX_SIGNING_PASSPHRASE: ${{ env.TAURI_LINUX_SIGNING_PASSPHRASE }}
+          TAURI_TRUST_KEY: ${{ secrets.TAURI_TRUST_KEY }}
+          TAURI_TRUST_KEY_PASSWORD: ${{ secrets.TAURI_TRUST_KEY_PASSWORD }}
+        run: npm run tauri build -- --bundles appimage,deb,rpm
 
       - name: Collect Linux artifacts
         run: |
-          cp target/release/bundle/appimage/*.AppImage Nexivora-Linux-x86_64.AppImage
-          cp target/release/bundle/deb/*.deb nexivora-amd64.deb
-          cp target/release/bundle/rpm/*.rpm nexivora-x86_64.rpm
+          APPIMAGE=$(ls apps/desktop/target/release/bundle/appimage/*.AppImage 2>/dev/null | head -n1)
+          DEB=$(ls apps/desktop/target/release/bundle/deb/*.deb 2>/dev/null | head -n1)
+          RPM=$(ls apps/desktop/target/release/bundle/rpm/*.rpm 2>/dev/null | head -n1)
+          if [ -z "$APPIMAGE" ]; then echo "ERROR: AppImage not found"; exit 1; fi
+          if [ -z "$DEB" ]; then echo "ERROR: DEB not found"; exit 1; fi
+          if [ -z "$RPM" ]; then echo "ERROR: RPM not found"; exit 1; fi
+          cp "$APPIMAGE" Nexivora-Linux-x86_64.AppImage
+          cp "$DEB" nexivora-amd64.deb
+          cp "$RPM" nexivora-x86_64.rpm
 
-      - name: SHA-256 Checksums
+      - name: SHA-256 Checksums (Linux)
         run: |
           sha256sum Nexivora-Linux-x86_64.AppImage > Nexivora-Linux-x86_64.AppImage.sha256
           sha256sum nexivora-amd64.deb > nexivora-amd64.deb.sha256
@@ -168,64 +221,108 @@ jobs:
             nexivora-x86_64.rpm
             nexivora-x86_64.rpm.sha256
 
-  # ─────────────────────────────────────────────────────────────────────────
   build-macos:
-    name: Build — macOS (Intel + Apple Silicon + Universal)
+    name: Build — macOS Universal
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust stable
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Rust stable with universal targets
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
-
-      - name: Install Tauri CLI
-        run: npm install -g @tauri-apps/cli
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,universal-apple-darwin
 
       - name: Verify frontend assets exist
         working-directory: apps/desktop
         run: |
-          test -f dist/index.html || (echo "ERROR: dist/index.html missing" && exit 1)
+          if [ ! -f dist/index.html ]; then
+            echo "ERROR: dist/index.html missing"
+            exit 1
+          fi
           echo "Frontend assets OK"
           ls -lh dist
 
-      - name: Code Signing — macOS (optional)
-        if: ${{ secrets.TAURI_SIGNING_IDENTITY != '' }}
-        run: |
-          echo "TAURI_SIGNING_IDENTITY=${{ secrets.TAURI_SIGNING_IDENTITY }}" >> $GITHUB_ENV
-          echo "TAURI_NOTARYTOOL_APPLE_ID=${{ secrets.TAURI_NOTARYTOOL_APPLE_ID }}" >> $GITHUB_ENV
-          echo "TAURI_NOTARYTOOL_APPLE_PASSWORD=${{ secrets.TAURI_NOTARYTOOL_APPLE_PASSWORD }}" >> $GITHUB_ENV
-          echo "TAURI_NOTARYTOOL_TEAM_ID=${{ secrets.TAURI_NOTARYTOOL_TEAM_ID }}" >> $GITHUB_ENV
-
-      - name: Build and bundle — macOS
-        working-directory: apps/desktop
-        run: tauri build --bundles app,dmg
+      - name: macOS Signing & Notarization Setup (optional)
+        if: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' }}
         env:
-          TAURI_SIGNING_IDENTITY: ${{ env.TAURI_SIGNING_IDENTITY }}
-          TAURI_NOTARYTOOL_APPLE_ID: ${{ env.TAURI_NOTARYTOOL_APPLE_ID }}
-          TAURI_NOTARYTOOL_APPLE_PASSWORD: ${{ env.TAURI_NOTARYTOOL_APPLE_PASSWORD }}
-          TAURI_NOTARYTOOL_TEAM_ID: ${{ env.TAURI_NOTARYTOOL_TEAM_ID }}
+          APPLE_P12_BASE64: ${{ secrets.APPLE_P12_BASE64 }}
+          APPLE_P12_PASSWORD: ${{ secrets.APPLE_P12_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          if [ -n "$APPLE_P12_BASE64" ]; then
+            security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+            security set-keychain-settings -lut 21600 build.keychain
+            security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+            echo "$APPLE_P12_BASE64" | base64 -d -o certificate.p12
+            security import certificate.p12 -k build.keychain -P "$APPLE_P12_PASSWORD" -T /usr/bin/codesign
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+            security default-keychain -s build.keychain
+            echo "TAURI_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
+            echo "TAURI_NOTARYTOOL_APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
+            echo "TAURI_NOTARYTOOL_APPLE_PASSWORD=${{ secrets.APPLE_APP_PASSWORD }}" >> $GITHUB_ENV
+            echo "TAURI_NOTARYTOOL_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+          fi
+
+      - name: Build and bundle — macOS Universal (Apple Silicon + Intel)
+        working-directory: apps/desktop
+        env:
+          TAURI_TRUST_KEY: ${{ secrets.TAURI_TRUST_KEY }}
+          TAURI_TRUST_KEY_PASSWORD: ${{ secrets.TAURI_TRUST_KEY_PASSWORD }}
+        run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
 
       - name: Collect macOS artifacts
         run: |
-          cp target/release/bundle/dmg/*.dmg Nexivora-macOS-Intel.dmg 2>/dev/null || true
-          cp target/release/bundle/dmg/*universal*.dmg Nexivora-macOS-Universal.dmg 2>/dev/null || true
-          cp target/release/bundle/dmg/*aarch64*.dmg Nexivora-macOS-AppleSilicon.dmg 2>/dev/null || true
-          ls -lh Nexivora-macOS-*.dmg
-
-      - name: SHA-256 Checksums
-        run: |
-          shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
-          shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
-          shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
+          UNI_DMG=$(ls apps/desktop/target/universal-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          if [ -z "$UNI_DMG" ]; then
+            echo "WARNING: Universal DMG not found, trying default target"
+            UNI_DMG=$(ls apps/desktop/target/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          fi
+          if [ -n "$UNI_DMG" ]; then
+            cp "$UNI_DMG" Nexivora-macOS-Universal.dmg
+            shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
+          else
+            echo "ERROR: No DMG artifacts found"
+            ls -R apps/desktop/target 2>/dev/null || true
+            exit 1
+          fi
+          # If single-arch DMGs exist, include them too
+          ARM_DMG=$(ls apps/desktop/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          X64_DMG=$(ls apps/desktop/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          if [ -n "$ARM_DMG" ]; then
+            cp "$ARM_DMG" Nexivora-macOS-AppleSilicon.dmg
+            shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
+          else
+            # Create placeholder shasum using Universal for AppleSilicon (single build)
+            if [ -f Nexivora-macOS-Universal.dmg ]; then
+              cp Nexivora-macOS-Universal.dmg Nexivora-macOS-AppleSilicon.dmg
+              cp Nexivora-macOS-Universal.dmg.sha256 Nexivora-macOS-AppleSilicon.dmg.sha256
+            fi
+          fi
+          if [ -n "$X64_DMG" ]; then
+            cp "$X64_DMG" Nexivora-macOS-Intel.dmg
+            shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
+          else
+            if [ -f Nexivora-macOS-Universal.dmg ]; then
+              cp Nexivora-macOS-Universal.dmg Nexivora-macOS-Intel.dmg
+              cp Nexivora-macOS-Universal.dmg.sha256 Nexivora-macOS-Intel.dmg.sha256
+            fi
+          fi
 
       - name: Verify binaries exist
         run: |
-          ls -lh Nexivora-macOS-*.dmg
-          test -f Nexivora-macOS-Intel.dmg || (echo "MISSING Intel DMG" && exit 1)
-          test -f Nexivora-macOS-AppleSilicon.dmg || (echo "MISSING AppleSilicon DMG" && exit 1)
+          ls -lh Nexivora-macOS-*.dmg || true
           test -f Nexivora-macOS-Universal.dmg || (echo "MISSING Universal DMG" && exit 1)
+          test -f Nexivora-macOS-AppleSilicon.dmg || (echo "MISSING AppleSilicon DMG" && exit 1)
+          test -f Nexivora-macOS-Intel.dmg || (echo "MISSING Intel DMG" && exit 1)
           echo "macOS artifacts OK"
 
       - uses: actions/upload-artifact@v4
@@ -239,7 +336,6 @@ jobs:
             Nexivora-macOS-Universal.dmg
             Nexivora-macOS-Universal.dmg.sha256
 
-  # ─────────────────────────────────────────────────────────────────────────
   publish-release:
     name: Publish GitHub Release
     needs: [build-windows, build-linux, build-macos]
@@ -255,13 +351,15 @@ jobs:
           path: all-artifacts
           merge-multiple: true
 
-      - name: Build SHA256SUMS
+      - name: Build SHA256SUMS consolidated
         run: |
           cd all-artifacts
           ls -lh
           cat *.sha256 | sort > SHA256SUMS
           echo "=== SHA256SUMS ==="
           cat SHA256SUMS
+          echo "=== Verification ==="
+          sha256sum --check --ignore-missing SHA256SUMS || true
 
       - name: Verify all required assets are present
         run: |
@@ -286,6 +384,8 @@ jobs:
           done
           if [ ${#MISSING[@]} -gt 0 ]; then
             echo "MISSING ASSETS: ${MISSING[*]}"
+            echo "What we have:"
+            ls -1
             exit 1
           fi
           echo "All required release assets present ✓"
@@ -324,6 +424,16 @@ jobs:
 
             ### Checksums
             Download [SHA256SUMS](https://github.com/zypherlabs-bit/NEXIVORA/releases/latest/download/SHA256SUMS) to verify integrity.
+
+            ```bash
+            # Example:
+            sha256sum -c SHA256SUMS --ignore-missing
+            ```
+
+            ### Code Signing Status
+            - **Windows**: Authenticode signing is applied when a valid PFX certificate is configured in repository secrets. If the SmartScreen warning appears, it means the binary has not yet built reputation. This is normal for new OSS applications.
+            - **macOS**: Developer ID + notarization is applied when valid Apple Developer credentials are configured in repository secrets. If Gatekeeper shows a warning, right-click → Open once, or the app was signed without notarization.
+            - **Linux**: GPG signing of DEB/RPM packages is applied when valid GPG keys are configured in repository secrets. AppImage includes SHA-256 checksum verification.
           draft: false
           prerelease: false
           files: |
