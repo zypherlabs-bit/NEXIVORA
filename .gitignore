@@ -44,6 +44,15 @@ Thumbs.db
 *.deb
 *.rpm
 
+# Release artifacts
+Nexivora-Windows-*
+nexivora-*.deb
+nexivora-*.rpm
+Nexivora-Linux-*
+Nexivora-macOS-*
+*.sha256
+SHA256SUMS
+
 # Documentation build
 **/docs/_build/
 

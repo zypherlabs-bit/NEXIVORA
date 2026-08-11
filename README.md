@@ -21,7 +21,7 @@ Nexivora is available for Windows, Linux, and macOS. Choose your platform:
 
 **Supported Versions**: Windows 10 (64-bit) and Windows 11
 
-**Requirements**: WebView2 runtime (included in Windows 11; auto-installed on Windows 10)
+**Requirements**: WebView2 runtime (included in Windows 11; the installer embeds the WebView2 bootstrapper and will install it automatically on Windows 10 if needed)
 
 **Installation**:
 ```powershell
@@ -118,8 +118,9 @@ For more detailed documentation, see the [docs](docs/README.md).
 
 ### Blank window / page not loading
 - Ensure **WebView2 Runtime** is installed: https://developer.microsoft.com/en-us/microsoft-edge/webview2/
-- Windows 11 includes WebView2 by default; Windows 10 may require manual installation
-- Run the installer as Administrator if the app fails to start
+- Windows 11 includes WebView2 by default; the NSIS/MSI installer embeds the WebView2 bootstrapper and installs it automatically on Windows 10 if needed
+- If you are using the **portable EXE** on a machine without WebView2, the app will show a clear error dialog with a link to install WebView2
+- Run the installer as Administrator if the app fails to start (the MSI installer requires admin privileges; the NSIS installer does not)
 
 ### Antivirus / SmartScreen warnings
 - Nexivora is unsigned open-source software; SmartScreen may show a warning on first launch

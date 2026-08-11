@@ -79,7 +79,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            apps/desktop/target
+            target
           key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
           restore-keys: |
             ${{ runner.os }}-cargo-desktop-
@@ -91,7 +91,7 @@ jobs:
       - name: Verify binary was produced
         shell: pwsh
         run: |
-          $bin = "apps/desktop/target/release/nexivora-desktop.exe"
+          $bin = "target/release/nexivora-desktop.exe"
           if (-not (Test-Path $bin)) {
             Write-Host "ERROR: Missing $bin"
             exit 1

@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path Nexivora-Portable | Out-Null
-          Copy-Item apps/desktop/target/release/nexivora-desktop.exe Nexivora-Portable/Nexivora.exe
+          Copy-Item target/release/nexivora-desktop.exe Nexivora-Portable/Nexivora.exe
           Copy-Item README.md Nexivora-Portable/README.md
           Copy-Item LICENSE Nexivora-Portable/LICENSE
           Compress-Archive -Path Nexivora-Portable/* -DestinationPath Nexivora-Windows-Portable.zip -Force
@@ -86,10 +86,10 @@ jobs:
       - name: Collect Windows artifacts
         shell: pwsh
         run: |
-          Copy-Item apps/desktop/target/release/nexivora-desktop.exe Nexivora-Windows-x64.exe
-          $msi = Get-ChildItem -Path "apps/desktop/target/release/bundle/msi/Nexivora_*_x64_en-US.msi" | Select-Object -First 1
+          Copy-Item target/release/nexivora-desktop.exe Nexivora-Windows-x64.exe
+          $msi = Get-ChildItem -Path "target/release/bundle/msi/Nexivora_*_x64_en-US.msi" | Select-Object -First 1
           if ($msi) { Copy-Item $msi.FullName Nexivora-Windows-x64.msi } else { Write-Host "WARNING: MSI not found" }
-          $nsis = Get-ChildItem -Path "apps/desktop/target/release/bundle/nsis/Nexivora_*_x64-setup.exe" | Select-Object -First 1
+          $nsis = Get-ChildItem -Path "target/release/bundle/nsis/Nexivora_*_x64-setup.exe" | Select-Object -First 1
           if ($nsis) { Copy-Item $nsis.FullName Nexivora-Windows-x64-setup.exe } else { Write-Host "WARNING: NSIS setup not found" }
 
       - name: SHA-256 Checksums (Windows)
@@ -195,9 +195,9 @@ jobs:
 
       - name: Collect Linux artifacts
         run: |
-          APPIMAGE=$(ls apps/desktop/target/release/bundle/appimage/*.AppImage 2>/dev/null | head -n1)
-          DEB=$(ls apps/desktop/target/release/bundle/deb/*.deb 2>/dev/null | head -n1)
-          RPM=$(ls apps/desktop/target/release/bundle/rpm/*.rpm 2>/dev/null | head -n1)
+          APPIMAGE=$(ls target/release/bundle/appimage/*.AppImage 2>/dev/null | head -n1)
+          DEB=$(ls target/release/bundle/deb/*.deb 2>/dev/null | head -n1)
+          RPM=$(ls target/release/bundle/rpm/*.rpm 2>/dev/null | head -n1)
           if [ -z "$APPIMAGE" ]; then echo "ERROR: AppImage not found"; exit 1; fi
           if [ -z "$DEB" ]; then echo "ERROR: DEB not found"; exit 1; fi
           if [ -z "$RPM" ]; then echo "ERROR: RPM not found"; exit 1; fi
@@ -290,22 +290,22 @@ jobs:
 
       - name: Collect macOS artifacts
         run: |
-          UNI_DMG=$(ls apps/desktop/target/universal-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          UNI_DMG=$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
           if [ -z "$UNI_DMG" ]; then
             echo "WARNING: Universal DMG not found, trying default target"
-            UNI_DMG=$(ls apps/desktop/target/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+            UNI_DMG=$(ls target/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
           fi
           if [ -n "$UNI_DMG" ]; then
             cp "$UNI_DMG" Nexivora-macOS-Universal.dmg
             shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
           else
             echo "ERROR: No DMG artifacts found"
-            ls -R apps/desktop/target 2>/dev/null || true
+            ls -R target 2>/dev/null || true
             exit 1
           fi
           # If single-arch DMGs exist, include them too
-          ARM_DMG=$(ls apps/desktop/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
-          X64_DMG=$(ls apps/desktop/target/x86_64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          ARM_DMG=$(ls target/aarch64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          X64_DMG=$(ls target/x86_64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
           if [ -n "$ARM_DMG" ]; then
             cp "$ARM_DMG" Nexivora-macOS-AppleSilicon.dmg
             shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
