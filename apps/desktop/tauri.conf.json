@@ -67,7 +67,7 @@
       "minimumSystemVersion": "10.15",
       "exceptionDomain": "",
       "entitlements": null,
-      "hardenedRuntime": true
+      "hardenedRuntime": false
     },
     "linux": {
       "appimage": {
