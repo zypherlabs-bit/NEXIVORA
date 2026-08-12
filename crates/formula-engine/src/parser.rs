@@ -5,7 +5,7 @@ use rust_decimal::Decimal;
 
 use crate::ast::{BinOp, CellReference, Expr, RangeReference, UnOp};
 use crate::error::{FormulaError, FormulaErrorKind};
-use crate::lexer::{Token, TokenKind, tokenize};
+use crate::lexer::{tokenize, Token, TokenKind};
 
 /// A parsed formula: the original source and the root expression.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,7 +40,11 @@ pub fn parse(input: &str) -> Result<ParsedFormula, FormulaError> {
 /// Operator precedence, higher binds tighter.
 fn precedence(kind: &TokenKind) -> Option<u8> {
     match kind {
-        TokenKind::Eq | TokenKind::Ne | TokenKind::Lt | TokenKind::Le | TokenKind::Gt
+        TokenKind::Eq
+        | TokenKind::Ne
+        | TokenKind::Lt
+        | TokenKind::Le
+        | TokenKind::Gt
         | TokenKind::Ge => Some(1),
         TokenKind::Amp => Some(2),
         TokenKind::Plus | TokenKind::Minus => Some(3),
@@ -128,8 +132,7 @@ impl<'a> Parser<'a> {
     pub fn parse_expression(&mut self, min_prec: u8) -> Result<Expr, FormulaError> {
         let mut lhs = self.parse_prefix()?;
 
-        loop {
-            let Some(tok) = self.peek() else { break };
+        while let Some(tok) = self.peek() {
             // Postfix percent
             if matches!(tok.kind, TokenKind::Percent) {
                 self.advance();
@@ -187,12 +190,8 @@ impl<'a> Parser<'a> {
                 })?;
                 Ok(Expr::Number(d))
             }
-            TokenKind::String(s) => {
-                Ok(Expr::Text(s.clone()))
-            }
-            TokenKind::Bool(b) => {
-                Ok(Expr::Bool(*b))
-            }
+            TokenKind::String(s) => Ok(Expr::Text(s.clone())),
+            TokenKind::Bool(b) => Ok(Expr::Bool(*b)),
             TokenKind::Plus | TokenKind::Minus => {
                 let op = if matches!(tok.kind, TokenKind::Plus) {
                     UnOp::Plus
@@ -211,28 +210,24 @@ impl<'a> Parser<'a> {
                 Ok(e)
             }
             TokenKind::Dollar => {
-                let mut col_abs = true;
+                let col_abs = true;
                 let mut row_abs = false;
-                
+
                 // Check if we have a second dollar sign immediately after
                 if matches!(self.peek().map(|t| &t.kind), Some(TokenKind::Dollar)) {
                     self.advance();
                     row_abs = true;
                 }
-                
+
                 // Collect the identifier parts (column letters)
                 let mut col_parts = Vec::new();
-                while let Some(t) = self.peek() {
-                    match &t.kind {
-                        TokenKind::Identifier(part) => {
-                            col_parts.push(part.clone());
-                            self.advance();
-                            break; // We expect only one identifier for column
-                        }
-                        _ => break,
+                if let Some(t) = self.peek() {
+                    if let TokenKind::Identifier(part) = &t.kind {
+                        col_parts.push(part.clone());
+                        self.advance();
                     }
                 }
-                
+
                 // Now handle the row number
                 let mut row_parts = Vec::new();
                 while let Some(t) = self.peek() {
@@ -256,11 +251,11 @@ impl<'a> Parser<'a> {
                         _ => break,
                     }
                 }
-                
+
                 let col_ident = col_parts.join("");
                 let row_ident = row_parts.join("");
                 let ident = format!("{}{}", col_ident, row_ident);
-                
+
                 if self.is_cell_ref(&ident) {
                     let c = self.parse_cell_ident(&ident, col_abs, row_abs);
                     Ok(Expr::CellRef(c))
@@ -321,10 +316,7 @@ impl<'a> Parser<'a> {
                         }
                     }
                     self.expect(&TokenKind::RParen)?;
-                    return Ok(Expr::Function {
-                        name,
-                        args,
-                    });
+                    return Ok(Expr::Function { name, args });
                 }
                 // Named range
                 Ok(Expr::Name(ident_owned))
@@ -350,13 +342,17 @@ impl<'a> Parser<'a> {
         } else {
             false
         };
-        let t = self.advance().ok_or_else(|| FormulaError::plain(FormulaErrorKind::UnexpectedEnd))?;
+        let t = self
+            .advance()
+            .ok_or_else(|| FormulaError::plain(FormulaErrorKind::UnexpectedEnd))?;
         let ident = match &t.kind {
             TokenKind::Identifier(ident) => ident.clone(),
-            _ => return Err(FormulaError::new(
-                FormulaErrorKind::UnexpectedToken,
-                "expected cell reference after ':'",
-            )),
+            _ => {
+                return Err(FormulaError::new(
+                    FormulaErrorKind::UnexpectedToken,
+                    "expected cell reference after ':'",
+                ))
+            }
         };
         if self.is_cell_ref(&ident) {
             Ok(self.parse_cell_ident(&ident, col_abs, row_abs))
@@ -376,10 +372,7 @@ mod tests {
     #[test]
     fn parse_basic_arithmetic() {
         let f = parse("=1+2*3").unwrap();
-        assert!(matches!(
-            f.expr,
-            Expr::Binary { op: BinOp::Add, .. }
-        ));
+        assert!(matches!(f.expr, Expr::Binary { op: BinOp::Add, .. }));
     }
 
     #[test]
@@ -457,10 +450,7 @@ mod tests {
     #[test]
     fn parse_percent() {
         let f = parse("=50%").unwrap();
-        assert!(matches!(
-            f.expr,
-            Expr::Binary { op: BinOp::Div, .. }
-        ));
+        assert!(matches!(f.expr, Expr::Binary { op: BinOp::Div, .. }));
     }
 
     #[test]

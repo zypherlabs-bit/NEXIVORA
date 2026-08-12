@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[allow(dead_code)] // Public API type, constructed by higher-level document operations
 pub struct Document {
     pub id: String,
     pub title: Option<String>,

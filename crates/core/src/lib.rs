@@ -5,10 +5,10 @@
 //! units, and text utilities.
 
 pub mod error;
+pub mod id;
+pub mod text;
 pub mod types;
 pub mod units;
-pub mod text;
-pub mod id;
 
 pub use error::{Error, Result};
 pub use types::*;

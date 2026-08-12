@@ -89,9 +89,8 @@ impl CellRange {
     pub fn cells(&self) -> impl Iterator<Item = CellRef> {
         let start = self.start;
         let end = self.end;
-        (start.row..=end.row).flat_map(move |r| {
-            (start.col..=end.col).map(move |c| CellRef::new(r, c))
-        })
+        (start.row..=end.row)
+            .flat_map(move |r| (start.col..=end.col).map(move |c| CellRef::new(r, c)))
     }
 
     /// Render as A1 range notation.

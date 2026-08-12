@@ -55,6 +55,64 @@ jobs:
       - name: Test
         run: cargo test --workspace --verbose
 
+  build-linux-quick:
+    name: Quick Linux build (AppImage)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-desktop-
+
+      - name: Install system dependencies (Tauri + AppImage)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libfuse2 \
+            libssl-dev \
+            pkg-config \
+            desktop-file-utils
+          sudo modprobe fuse 2>/dev/null || true
+
+      - name: Build Nexivora desktop (release, AppImage)
+        working-directory: apps/desktop
+        run: npm run tauri build -- --bundles appimage
+
+      - name: Verify AppImage was produced
+        run: |
+          APPIMAGE=$(ls target/release/bundle/appimage/*.AppImage 2>/dev/null | head -n1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "ERROR: AppImage not found"
+            exit 1
+          fi
+          chmod +x "$APPIMAGE"
+          ls -lh "$APPIMAGE"
+          echo "OK: Linux AppImage compiled successfully"
+
   build-windows-quick:
     name: Quick Windows build
     runs-on: windows-latest
@@ -98,3 +156,48 @@ jobs:
           }
           Get-Item $bin | Select-Object Name, Length, LastWriteTime
           Write-Host "OK: Desktop binary compiled successfully"
+
+  build-macos-quick:
+    name: Quick macOS build (Universal)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Install Rust stable with universal targets
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin,universal-apple-darwin
+
+      - name: Cache Cargo target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-desktop-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-desktop-
+
+      - name: Build Nexivora desktop (release, Universal)
+        working-directory: apps/desktop
+        run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+
+      - name: Verify macOS artifacts
+        run: |
+          UNI_DMG=$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+          if [ -z "$UNI_DMG" ]; then
+            echo "ERROR: Universal DMG not found"
+            exit 1
+          fi
+          ls -lh "$UNI_DMG"
+          echo "OK: macOS Universal DMG compiled successfully"

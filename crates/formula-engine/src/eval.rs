@@ -2,8 +2,8 @@
 
 use std::collections::HashSet;
 
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 
 use crate::ast::{BinOp, Expr};
 use crate::error::{FormulaError, FormulaErrorKind};
@@ -40,11 +40,7 @@ pub fn evaluate(
         Expr::Text(s) => Ok(Value::Text(s.clone())),
         Expr::Bool(b) => Ok(Value::Bool(*b)),
         Expr::CellRef(cell) => {
-            let key = (
-                sheet.map(|s| s.to_string()),
-                cell.row,
-                cell.col,
-            );
+            let key = (sheet.map(|s| s.to_string()), cell.row, cell.col);
             if visited.contains(&key) {
                 return Err(FormulaError::plain(FormulaErrorKind::CircularRef));
             }
@@ -140,8 +136,12 @@ fn apply_number_op<F>(l: Value, r: Value, f: F) -> Result<Value, FormulaError>
 where
     F: FnOnce(Decimal, Decimal) -> Result<Value, FormulaError>,
 {
-    let a = l.as_number().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
-    let b = r.as_number().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
+    let a = l
+        .as_number()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
+    let b = r
+        .as_number()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
     f(a, b)
 }
 
@@ -149,8 +149,12 @@ fn apply_number_cmp<F>(l: Value, r: Value, f: F) -> Result<Value, FormulaError>
 where
     F: Fn(Decimal, Decimal) -> bool,
 {
-    let a = l.as_number().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
-    let b = r.as_number().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
+    let a = l
+        .as_number()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
+    let b = r
+        .as_number()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))?;
     Ok(Value::Bool(f(a, b)))
 }
 
@@ -202,7 +206,7 @@ mod tests {
         assert_eq!(v.as_number(), Some(Decimal::new(100, 0)));
     }
 
-        #[test]
+    #[test]
     fn eval_function() {
         let f = crate::parser::parse("=SUM(A1:A3)").unwrap();
         let mut visited = HashSet::new();

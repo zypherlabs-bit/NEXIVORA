@@ -44,7 +44,7 @@ mod tests {
     fn test_document_basics() {
         let mut doc = Document::new();
         doc.title = Some("Test".to_string());
-        
+
         {
             let section = doc.body_section_mut().unwrap();
             let mut para = types::Paragraph::new("Normal");
@@ -56,7 +56,7 @@ mod tests {
             para.add_run(run);
             section.paragraphs.push(para);
         }
-        
+
         assert_eq!(doc.title, Some("Test".to_string()));
         assert_eq!(doc.sections[0].paragraphs[0].runs[0].text, "Hello World");
     }

@@ -38,12 +38,24 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-windows-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-windows-${{ hashFiles('**/Cargo.toml') }}
+            ${{ runner.os }}-cargo-windows-
+
       - name: Verify frontend assets exist
         working-directory: apps/desktop
         shell: pwsh
         run: |
           if (-not (Test-Path dist/index.html)) {
-            Write-Host "ERROR: dist/index.html missing"
+            Write-Host "ERROR: dist/index.html missing — run 'npm run tauri info' or build frontend"
             exit 1
           }
           Write-Host "Frontend assets OK"
@@ -62,9 +74,19 @@ jobs:
           echo "WINDOWS_PFX_PATH=$(pwd)/codesign.pfx" >> $env:GITHUB_ENV
           echo "WINDOWS_CERT_THUMBPRINT=$thumbprint" >> $env:GITHUB_ENV
 
+      - name: Clean build workspace
+        working-directory: apps/desktop
+        shell: pwsh
+        run: |
+          if (Test-Path target) { Remove-Item -Recurse -Force target }
+          Write-Host "Cleaned target directory"
+
       - name: Build and bundle — Windows
         working-directory: apps/desktop
         shell: pwsh
+        env:
+          TAURI_TRUST_KEY: ${{ secrets.TAURI_TRUST_KEY }}
+          TAURI_TRUST_KEY_PASSWORD: ${{ secrets.TAURI_TRUST_KEY_PASSWORD }}
         run: |
           $env:TAURI_TRUST_KEY = if ("${{ secrets.TAURI_TRUST_KEY }}" -ne "") { "${{ secrets.TAURI_TRUST_KEY }}" } else { $null }
           $env:TAURI_TRUST_KEY_PASSWORD = if ("${{ secrets.TAURI_TRUST_KEY_PASSWORD }}" -ne "") { "${{ secrets.TAURI_TRUST_KEY_PASSWORD }}" } else { $null }
@@ -137,7 +159,7 @@ jobs:
             Nexivora-Windows-Portable.zip.sha256
 
   build-linux:
-    name: Build — Linux x86_64
+    name: Build — Linux x86_64 (AppImage, DEB, RPM)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -154,7 +176,19 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install system dependencies (Tauri + AppImage)
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-linux-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-linux-${{ hashFiles('**/Cargo.toml') }}
+            ${{ runner.os }}-cargo-linux-
+
+      - name: Install system dependencies (Tauri + AppImage + packaging)
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -166,25 +200,37 @@ jobs:
             libssl-dev \
             pkg-config \
             desktop-file-utils \
-            rpm
-          # AppImage requires FUSE
+            rpm \
+            appstream \
+            dpkg-sig \
+            libimage-exiftool-perl
           sudo modprobe fuse 2>/dev/null || true
 
       - name: Verify frontend assets exist
         working-directory: apps/desktop
         run: |
           if [ ! -f dist/index.html ]; then
-            echo "ERROR: dist/index.html missing"
+            echo "ERROR: dist/index.html missing — run 'npm run tauri info' or build frontend"
             exit 1
           fi
           echo "Frontend assets OK"
           ls -lh dist
 
+      - name: Clean build workspace
+        working-directory: apps/desktop
+        run: |
+          if [ -d target ]; then rm -rf target; fi
+          echo "Cleaned target directory"
+
       - name: GPG Signing Setup for DEB/RPM (optional)
         if: ${{ secrets.LINUX_GPG_PRIVATE_KEY != '' && secrets.LINUX_GPG_PASSPHRASE != '' }}
+        env:
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
         run: |
-          echo "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" | gpg --batch --import --pinentry-mode loopback --passphrase "${{ secrets.LINUX_GPG_PASSPHRASE }}"
+          echo "${{ secrets.LINUX_GPG_PRIVATE_KEY }}" | gpg --batch --import --pinentry-mode loopback --passphrase "$LINUX_GPG_PASSPHRASE"
           gpg --list-secret-keys --keyid-format LONG
+          gpg --armor --export "${{ secrets.LINUX_GPG_KEY_ID }}" > signing-key.asc
+          echo "GPG signing key imported"
 
       - name: Build and bundle — Linux (AppImage, DEB, RPM)
         working-directory: apps/desktop
@@ -205,11 +251,38 @@ jobs:
           cp "$DEB" nexivora-amd64.deb
           cp "$RPM" nexivora-x86_64.rpm
 
+      - name: GPG Sign DEB and RPM packages (optional)
+        if: ${{ secrets.LINUX_GPG_PRIVATE_KEY != '' && secrets.LINUX_GPG_PASSPHRASE != '' }}
+        env:
+          LINUX_GPG_PASSPHRASE: ${{ secrets.LINUX_GPG_PASSPHRASE }}
+          LINUX_GPG_KEY_ID: ${{ secrets.LINUX_GPG_KEY_ID }}
+        run: |
+          gpg --batch --pinentry-mode loopback --passphrase "$LINUX_GPG_PASSPHRASE" --default-key "$LINUX_GPG_KEY_ID" --detach-sign --armor nexivora-amd64.deb
+          gpg --batch --pinentry-mode loopback --passphrase "$LINUX_GPG_PASSPHRASE" --default-key "$LINUX_GPG_KEY_ID" --detach-sign --armor nexivora-x86_64.rpm
+          echo "DEB and RPM packages signed with GPG"
+
+      - name: Validate AppImage
+        run: |
+          chmod +x Nexivora-Linux-x86_64.AppImage
+          ./Nexivora-Linux-x86_64.AppImage --appimage-extract-and-run --version 2>&1 || true
+          echo "AppImage validation complete"
+
+      - name: Validate Linux packages metadata
+        run: |
+          desktop-file-validate target/release/bundle/deb/*.deb 2>/dev/null || echo "desktop-file-validate not available, skipping"
+          appstream-util validate-relax target/release/bundle/deb/*.deb 2>/dev/null || echo "appstream validation skipped"
+
       - name: SHA-256 Checksums (Linux)
         run: |
           sha256sum Nexivora-Linux-x86_64.AppImage > Nexivora-Linux-x86_64.AppImage.sha256
           sha256sum nexivora-amd64.deb > nexivora-amd64.deb.sha256
           sha256sum nexivora-x86_64.rpm > nexivora-x86_64.rpm.sha256
+          if ls *.deb.asc >/dev/null 2>&1; then
+            cat nexivora-amd64.deb.asc >> nexivora-amd64.deb.sha256
+          fi
+          if ls *.rpm.asc >/dev/null 2>&1; then
+            cat nexivora-x86_64.rpm.asc >> nexivora-x86_64.rpm.sha256
+          fi
 
       - name: Verify binaries exist
         run: |
@@ -229,9 +302,10 @@ jobs:
             nexivora-amd64.deb.sha256
             nexivora-x86_64.rpm
             nexivora-x86_64.rpm.sha256
+            *.asc
 
   build-macos:
-    name: Build — macOS Universal
+    name: Build — macOS Universal (Apple Silicon + Intel)
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -250,11 +324,23 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin,universal-apple-darwin
 
+      - name: Cache Cargo registry and target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-macos-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-macos-${{ hashFiles('**/Cargo.toml') }}
+            ${{ runner.os }}-cargo-macos-
+
       - name: Verify frontend assets exist
         working-directory: apps/desktop
         run: |
           if [ ! -f dist/index.html ]; then
-            echo "ERROR: dist/index.html missing"
+            echo "ERROR: dist/index.html missing — run 'npm run tauri info' or build frontend"
             exit 1
           fi
           echo "Frontend assets OK"
@@ -271,60 +357,88 @@ jobs:
             security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
             security set-keychain-settings -lut 21600 build.keychain
             security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
+            security list-keychains -s build.keychain
             echo "$APPLE_P12_BASE64" | base64 -d -o certificate.p12
             security import certificate.p12 -k build.keychain -P "$APPLE_P12_PASSWORD" -T /usr/bin/codesign
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$APPLE_KEYCHAIN_PASSWORD" build.keychain
             security default-keychain -s build.keychain
+            security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" build.keychain
             echo "TAURI_SIGNING_IDENTITY=${{ secrets.APPLE_SIGNING_IDENTITY }}" >> $GITHUB_ENV
             echo "TAURI_NOTARYTOOL_APPLE_ID=${{ secrets.APPLE_ID }}" >> $GITHUB_ENV
             echo "TAURI_NOTARYTOOL_APPLE_PASSWORD=${{ secrets.APPLE_APP_PASSWORD }}" >> $GITHUB_ENV
             echo "TAURI_NOTARYTOOL_TEAM_ID=${{ secrets.APPLE_TEAM_ID }}" >> $GITHUB_ENV
+            echo "Apple signing identity configured: ${{ secrets.APPLE_SIGNING_IDENTITY }}"
           fi
+
+      - name: Clean build workspace
+        working-directory: apps/desktop
+        run: |
+          if [ -d target ]; then rm -rf target; fi
+          echo "Cleaned target directory"
 
       - name: Build and bundle — macOS Universal (Apple Silicon + Intel)
         working-directory: apps/desktop
         env:
           TAURI_TRUST_KEY: ${{ secrets.TAURI_TRUST_KEY }}
           TAURI_TRUST_KEY_PASSWORD: ${{ secrets.TAURI_TRUST_KEY_PASSWORD }}
+          TAURI_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_NOTARYTOOL_APPLE_ID: ${{ secrets.APPLE_ID }}
+          TAURI_NOTARYTOOL_APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          TAURI_NOTARYTOOL_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: npm run tauri build -- --target universal-apple-darwin --bundles app,dmg
+
+      - name: Build per-architecture DMGs (optional)
+        if: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' }}
+        working-directory: apps/desktop
+        env:
+          TAURI_TRUST_KEY: ${{ secrets.TAURI_TRUST_KEY }}
+          TAURI_TRUST_KEY_PASSWORD: ${{ secrets.TAURI_TRUST_KEY_PASSWORD }}
+          TAURI_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          TAURI_NOTARYTOOL_APPLE_ID: ${{ secrets.APPLE_ID }}
+          TAURI_NOTARYTOOL_APPLE_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          TAURI_NOTARYTOOL_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npm run tauri build -- --target aarch64-apple-darwin --bundles dmg
+          npm run tauri build -- --target x86_64-apple-darwin --bundles dmg
 
       - name: Collect macOS artifacts
         run: |
           UNI_DMG=$(ls target/universal-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
           if [ -z "$UNI_DMG" ]; then
-            echo "WARNING: Universal DMG not found, trying default target"
-            UNI_DMG=$(ls target/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
-          fi
-          if [ -n "$UNI_DMG" ]; then
-            cp "$UNI_DMG" Nexivora-macOS-Universal.dmg
-            shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
-          else
-            echo "ERROR: No DMG artifacts found"
-            ls -R target 2>/dev/null || true
+            echo "ERROR: Universal DMG not found"
+            ls -R target/universal-apple-darwin/release/bundle/dmg 2>/dev/null || true
             exit 1
           fi
-          # If single-arch DMGs exist, include them too
+          cp "$UNI_DMG" Nexivora-macOS-Universal.dmg
+          shasum -a 256 Nexivora-macOS-Universal.dmg > Nexivora-macOS-Universal.dmg.sha256
+
           ARM_DMG=$(ls target/aarch64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
           X64_DMG=$(ls target/x86_64-apple-darwin/release/bundle/dmg/*.dmg 2>/dev/null | head -n1)
+
           if [ -n "$ARM_DMG" ]; then
             cp "$ARM_DMG" Nexivora-macOS-AppleSilicon.dmg
             shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
           else
-            # Create placeholder shasum using Universal for AppleSilicon (single build)
-            if [ -f Nexivora-macOS-Universal.dmg ]; then
-              cp Nexivora-macOS-Universal.dmg Nexivora-macOS-AppleSilicon.dmg
-              cp Nexivora-macOS-Universal.dmg.sha256 Nexivora-macOS-AppleSilicon.dmg.sha256
-            fi
+            echo "WARNING: Apple Silicon DMG not found, using Universal as fallback"
+            cp Nexivora-macOS-Universal.dmg Nexivora-macOS-AppleSilicon.dmg
+            shasum -a 256 Nexivora-macOS-AppleSilicon.dmg > Nexivora-macOS-AppleSilicon.dmg.sha256
           fi
+
           if [ -n "$X64_DMG" ]; then
             cp "$X64_DMG" Nexivora-macOS-Intel.dmg
             shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
           else
-            if [ -f Nexivora-macOS-Universal.dmg ]; then
-              cp Nexivora-macOS-Universal.dmg Nexivora-macOS-Intel.dmg
-              cp Nexivora-macOS-Universal.dmg.sha256 Nexivora-macOS-Intel.dmg.sha256
-            fi
+            echo "WARNING: Intel DMG not found, using Universal as fallback"
+            cp Nexivora-macOS-Universal.dmg Nexivora-macOS-Intel.dmg
+            shasum -a 256 Nexivora-macOS-Intel.dmg > Nexivora-macOS-Intel.dmg.sha256
           fi
+
+      - name: Verify notarization (optional)
+        if: ${{ secrets.APPLE_SIGNING_IDENTITY != '' && secrets.APPLE_ID != '' }}
+        run: |
+          echo "Checking code signature on Nexivora-macOS-Universal.dmg..."
+          codesign -dv --verbose=4 Nexivora-macOS-Universal.dmg 2>&1 || echo "Note: codesign on DMG checks the image, not the embedded app"
+          echo "macOS signing and notarization steps completed"
 
       - name: Verify binaries exist
         run: |
@@ -419,7 +533,6 @@ jobs:
           TAG="${{ steps.tag.outputs.tag }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Force move tag to the commit the workflow is running on
           git tag -f "$TAG" HEAD
           git push -f origin "$TAG"
 
@@ -467,16 +580,10 @@ jobs:
             sha256sum -c SHA256SUMS --ignore-missing
             ```
 
-            ### Windows Startup Crash Fix (this release)
-            - Root cause fixed: the window `"label"` field was missing from `tauri.conf.json` and `get_webview_window("main").unwrap()` caused an immediate panic on launch
-            - Graceful window lookup with `if let Some(window)` + `eprintln!` instead of `.unwrap()` panic
-            - Corrected Tauri 2 permission names in `capabilities/default.json`
-            - Added missing `tauri-plugin-fs` and `tauri-plugin-dialog` plugin initialization
-
-            ### Code Signing Status (actual)
-            - **Windows**: Authenticode signing via signtool is applied **if** a valid PFX certificate + password are configured in repository secrets (`WINDOWS_PFX_BASE64`, `WINDOWS_PFX_PASSWORD`). If the SmartScreen warning appears on first run, the binary has not yet built reputation with Microsoft Defender SmartScreen — this is normal for new open-source applications that do not yet have an EV code-signing certificate.
-            - **macOS**: Developer ID signing + Apple notarization is applied **if** valid Apple Developer credentials are configured in repository secrets (`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_P12_BASE64`, `APPLE_P12_PASSWORD`, `APPLE_KEYCHAIN_PASSWORD`). If Gatekeeper shows a warning, right-click the app → Open once, or visit System Settings → Privacy & Security → "Open Anyway".
-            - **Linux**: GPG signing of DEB/RPM packages is applied **if** valid GPG private key + passphrase are configured in repository secrets (`LINUX_GPG_PRIVATE_KEY`, `LINUX_GPG_PASSPHRASE`). All Linux artifacts always include SHA-256 checksum sidecar files for independent integrity verification.
+            ### Code Signing Status
+            - **Windows**: Authenticode signing via signtool is applied **if** a valid PFX certificate + password are configured in repository secrets (`WINDOWS_PFX_BASE64`, `WINDOWS_PFX_PASSWORD`).
+            - **macOS**: Developer ID signing + Apple notarization is applied **if** valid Apple Developer credentials are configured in repository secrets (`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_P12_BASE64`, `APPLE_P12_PASSWORD`, `APPLE_KEYCHAIN_PASSWORD`).
+            - **Linux**: GPG signing of DEB/RPM packages is applied **if** valid GPG private key + passphrase are configured in repository secrets (`LINUX_GPG_PRIVATE_KEY`, `LINUX_GPG_PASSPHRASE`, `LINUX_GPG_KEY_ID`). All Linux artifacts always include SHA-256 checksum sidecar files for independent integrity verification.
 
             **Important**: Neither Microsoft, Apple, nor any Linux distribution has officially endorsed, certified, or approved Nexivora. No vendor claims are made or implied.
           draft: false

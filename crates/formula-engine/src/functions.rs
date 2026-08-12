@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use chrono::{Datelike, Timelike};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 
 use crate::error::{FormulaError, FormulaErrorKind};
 use crate::value::Value;
@@ -23,10 +23,13 @@ pub struct FunctionSpec {
     pub category: &'static str,
 }
 
+/// A handler function signature for built-in spreadsheet functions.
+type FunctionHandler = fn(&[Value]) -> Result<Value, FormulaError>;
+
 /// A registry of all built-in functions.
 pub struct FunctionRegistry {
     specs: HashMap<String, FunctionSpec>,
-    handlers: HashMap<String, fn(&[Value]) -> Result<Value, FormulaError>>,
+    handlers: HashMap<String, FunctionHandler>,
 }
 
 static REGISTRY: OnceLock<FunctionRegistry> = OnceLock::new();
@@ -46,10 +49,19 @@ impl FunctionRegistry {
     }
 
     fn register_defaults(&mut self) {
-        let mut register = |name: &str, min: usize, max: usize, cat: &'static str, handler: fn(&[Value]) -> Result<Value, FormulaError>| {
-            self.specs.insert(name.to_string(), FunctionSpec { name: name.to_string(), min_args: min, max_args: max, category: cat });
-            self.handlers.insert(name.to_string(), handler);
-        };
+        let mut register =
+            |name: &str, min: usize, max: usize, cat: &'static str, handler: FunctionHandler| {
+                self.specs.insert(
+                    name.to_string(),
+                    FunctionSpec {
+                        name: name.to_string(),
+                        min_args: min,
+                        max_args: max,
+                        category: cat,
+                    },
+                );
+                self.handlers.insert(name.to_string(), handler);
+            };
 
         fn sum(args: &[Value]) -> Result<Value, FormulaError> {
             let mut sum = Decimal::ZERO;
@@ -65,7 +77,12 @@ impl FunctionRegistry {
                             }
                         }
                     }
-                    _ => return Err(FormulaError::new(FormulaErrorKind::Value, "expected number or range")),
+                    _ => {
+                        return Err(FormulaError::new(
+                            FormulaErrorKind::Value,
+                            "expected number or range",
+                        ))
+                    }
                 }
             }
             Ok(Value::number(sum))
@@ -74,7 +91,9 @@ impl FunctionRegistry {
 
         fn average(args: &[Value]) -> Result<Value, FormulaError> {
             let mut sum = Decimal::ZERO;
-            for v in args { sum += need_number(v)?; }
+            for v in args {
+                sum += need_number(v)?;
+            }
             let count = args.len() as u32;
             Ok(Value::number(sum / Decimal::from(count)))
         }
@@ -84,7 +103,9 @@ impl FunctionRegistry {
             let mut min = need_number(&args[0])?;
             for v in args.iter().skip(1) {
                 let n = need_number(v)?;
-                if n < min { min = n; }
+                if n < min {
+                    min = n;
+                }
             }
             Ok(Value::number(min))
         }
@@ -94,7 +115,9 @@ impl FunctionRegistry {
             let mut max = need_number(&args[0])?;
             for v in args.iter().skip(1) {
                 let n = need_number(v)?;
-                if n > max { max = n; }
+                if n > max {
+                    max = n;
+                }
             }
             Ok(Value::number(max))
         }
@@ -103,7 +126,11 @@ impl FunctionRegistry {
         fn count(args: &[Value]) -> Result<Value, FormulaError> {
             let mut count = 0usize;
             for v in args {
-                if v.is_number() || matches!(v, Value::Text(_) if !v.as_text().unwrap_or_default().is_empty()) { count += 1; }
+                if v.is_number()
+                    || matches!(v, Value::Text(_) if !v.as_text().unwrap_or_default().is_empty())
+                {
+                    count += 1;
+                }
             }
             Ok(Value::number(Decimal::from(count)))
         }
@@ -124,17 +151,25 @@ impl FunctionRegistry {
 
         fn if_fn(args: &[Value]) -> Result<Value, FormulaError> {
             let cond = need_boolean(&args[0])?;
-            Ok(if cond { args[1].clone() } else { args[2].clone() })
+            Ok(if cond {
+                args[1].clone()
+            } else {
+                args[2].clone()
+            })
         }
         register("IF", 3, 3, "Logical", if_fn);
 
         fn and(args: &[Value]) -> Result<Value, FormulaError> {
-            Ok(Value::boolean(args.iter().all(|v| need_boolean(v).unwrap_or(false))))
+            Ok(Value::boolean(
+                args.iter().all(|v| need_boolean(v).unwrap_or(false)),
+            ))
         }
         register("AND", 2, usize::MAX, "Logical", and);
 
         fn or(args: &[Value]) -> Result<Value, FormulaError> {
-            Ok(Value::boolean(args.iter().any(|v| need_boolean(v).unwrap_or(false))))
+            Ok(Value::boolean(
+                args.iter().any(|v| need_boolean(v).unwrap_or(false)),
+            ))
         }
         register("OR", 2, usize::MAX, "Logical", or);
 
@@ -168,7 +203,9 @@ impl FunctionRegistry {
 
         fn concat(args: &[Value]) -> Result<Value, FormulaError> {
             let mut out = String::new();
-            for v in args { out.push_str(need_text(v)?); }
+            for v in args {
+                out.push_str(need_text(v)?);
+            }
             Ok(Value::text(out))
         }
         register("CONCAT", 1, usize::MAX, "Text", concat);
@@ -189,7 +226,9 @@ impl FunctionRegistry {
             let s = need_text(&args[0])?;
             let n = need_number(&args[1])?.to_usize().unwrap_or(0);
             let len = s.chars().count();
-            Ok(Value::text(s.chars().skip(len.saturating_sub(n)).collect::<String>()))
+            Ok(Value::text(
+                s.chars().skip(len.saturating_sub(n)).collect::<String>(),
+            ))
         }
         register("RIGHT", 2, 2, "Text", right);
 
@@ -200,18 +239,30 @@ impl FunctionRegistry {
             let chars: Vec<char> = s.chars().collect();
             let start_idx = start.saturating_sub(1);
             let end_idx = start_idx + count;
-            Ok(Value::text(chars.get(start_idx..end_idx).unwrap_or(&[]).iter().collect::<String>()))
+            Ok(Value::text(
+                chars
+                    .get(start_idx..end_idx)
+                    .unwrap_or(&[])
+                    .iter()
+                    .collect::<String>(),
+            ))
         }
         register("MID", 3, 3, "Text", mid);
 
         fn find(args: &[Value]) -> Result<Value, FormulaError> {
             let find_text = need_text(&args[0])?;
             let within_text = need_text(&args[1])?;
-            let start = if args.len() == 3 { need_number(&args[2])?.to_usize().unwrap_or(1) } else { 1 };
+            let start = if args.len() == 3 {
+                need_number(&args[2])?.to_usize().unwrap_or(1)
+            } else {
+                1
+            };
             let chars: Vec<char> = within_text.chars().collect();
             let start_idx = start.saturating_sub(1);
             for (i, window) in chars.windows(find_text.chars().count()).enumerate() {
-                if i < start_idx { continue; }
+                if i < start_idx {
+                    continue;
+                }
                 if window.iter().collect::<String>() == find_text {
                     return Ok(Value::number(Decimal::from(i as u64 + 1)));
                 }
@@ -224,24 +275,26 @@ impl FunctionRegistry {
             let text = need_text(&args[0])?;
             let old_text = need_text(&args[1])?;
             let new_text = need_text(&args[2])?;
-            let instance = if args.len() == 4 { need_number(&args[3])?.to_usize() } else { None };
+            let instance = if args.len() == 4 {
+                need_number(&args[3])?.to_usize()
+            } else {
+                None
+            };
             let mut result = text.to_string();
             let mut count = 0usize;
             if old_text.is_empty() {
                 return Ok(Value::text(text));
             }
             let mut start = 0usize;
-            loop {
-                if let Some((idx, _)) = result[start..].match_indices(old_text).next() {
-                    count += 1;
-                    if instance.map(|i| count == i).unwrap_or(true) {
-                        let absolute_idx = start + idx;
-                        result.replace_range(absolute_idx..absolute_idx + old_text.len(), new_text);
-                        start = absolute_idx + new_text.len();
-                    } else {
-                        start += idx + old_text.len();
-                    }
-                } else { break; }
+            while let Some((idx, _)) = result[start..].match_indices(old_text).next() {
+                count += 1;
+                if instance.map(|i| count == i).unwrap_or(true) {
+                    let absolute_idx = start + idx;
+                    result.replace_range(absolute_idx..absolute_idx + old_text.len(), new_text);
+                    start = absolute_idx + new_text.len();
+                } else {
+                    start += idx + old_text.len();
+                }
             }
             Ok(Value::text(result))
         }
@@ -270,7 +323,10 @@ impl FunctionRegistry {
             let s = need_text(&args[0])?;
             match s.trim().parse::<Decimal>() {
                 Ok(d) => Ok(Value::number(d)),
-                Err(_) => Err(FormulaError::new(FormulaErrorKind::Value, "text cannot be parsed as number"))
+                Err(_) => Err(FormulaError::new(
+                    FormulaErrorKind::Value,
+                    "text cannot be parsed as number",
+                )),
             }
         }
         register("VALUE", 1, 1, "Text", value);
@@ -308,8 +364,8 @@ impl FunctionRegistry {
             let month = need_number(&args[1])?.to_i64().unwrap_or(1);
             let day = need_number(&args[2])?.to_i64().unwrap_or(1);
             let y = if year < 1900 { year + 1900 } else { year };
-            let m = month.max(1).min(12) as u32;
-            let d = day.max(1).min(31) as u32;
+            let m = month.clamp(1, 12) as u32;
+            let d = day.clamp(1, 31) as u32;
             let date = chrono::NaiveDate::from_ymd_opt(y as i32, m, d)
                 .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "invalid date"))?;
             Ok(Value::DateTime(date.and_hms_opt(0, 0, 0).unwrap()))
@@ -324,7 +380,11 @@ impl FunctionRegistry {
             let m = minute.rem_euclid(60) as u32;
             let s = second.rem_euclid(60) as u32;
             let time = chrono::NaiveTime::from_hms_opt(h, m, s).unwrap();
-            Ok(Value::DateTime(chrono::NaiveDate::from_ymd_opt(1899, 12, 30).unwrap().and_time(time)))
+            Ok(Value::DateTime(
+                chrono::NaiveDate::from_ymd_opt(1899, 12, 30)
+                    .unwrap()
+                    .and_time(time),
+            ))
         }
         register("TIME", 3, 3, "Date", time);
 
@@ -375,34 +435,56 @@ impl FunctionRegistry {
         fn edate(args: &[Value]) -> Result<Value, FormulaError> {
             let start = as_datetime(&args[0])?;
             let months = need_number(&args[1])?.to_i64().unwrap_or(0);
-            let mut y = start.year() as i32;
+            let mut y = start.year();
             let mut m = start.month() as i32;
             let total = m as i64 + months - 1;
             y += total.div_euclid(12) as i32;
             m = total.rem_euclid(12) as i32 + 1;
-            if m <= 0 { y -= 1; m += 12; }
-            let max_day = chrono::NaiveDate::from_ymd_opt(y, m as u32, 1).map(|d| d.succ_opt().unwrap().pred_opt().unwrap().day()).unwrap_or(30);
+            if m <= 0 {
+                y -= 1;
+                m += 12;
+            }
+            let max_day = chrono::NaiveDate::from_ymd_opt(y, m as u32, 1)
+                .map(|d| d.succ_opt().unwrap().pred_opt().unwrap().day())
+                .unwrap_or(30);
             let d = start.day().min(max_day);
-            let out = chrono::NaiveDate::from_ymd_opt(y, m as u32, d).expect("valid date").and_time(start.time());
+            let out = chrono::NaiveDate::from_ymd_opt(y, m as u32, d)
+                .expect("valid date")
+                .and_time(start.time());
             Ok(Value::DateTime(out))
         }
         register("EDATE", 2, 2, "Date", edate);
 
         fn eomonth(args: &[Value]) -> Result<Value, FormulaError> {
-            let months = if args.len() == 1 { 1 } else { need_number(&args[1])?.to_i64().unwrap_or(1) };
+            let months = if args.len() == 1 {
+                1
+            } else {
+                need_number(&args[1])?.to_i64().unwrap_or(1)
+            };
             let start = as_datetime(&args[0])?;
-            let mut y = start.year() as i32 + (months.div_euclid(12)) as i32;
+            let mut y = start.year() + (months.div_euclid(12)) as i32;
             let mut m = (start.month() as i64 + months.rem_euclid(12)) as i32;
-            if m <= 0 { y -= 1; m += 12; }
-            let max_day = chrono::NaiveDate::from_ymd_opt(y, m as u32, 1).map(|d| d.succ_opt().unwrap().pred_opt().unwrap().day()).unwrap_or(30);
-            Ok(Value::DateTime(chrono::NaiveDate::from_ymd_opt(y, m as u32, max_day).expect("valid date").and_time(start.time())))
+            if m <= 0 {
+                y -= 1;
+                m += 12;
+            }
+            let max_day = chrono::NaiveDate::from_ymd_opt(y, m as u32, 1)
+                .map(|d| d.succ_opt().unwrap().pred_opt().unwrap().day())
+                .unwrap_or(30);
+            Ok(Value::DateTime(
+                chrono::NaiveDate::from_ymd_opt(y, m as u32, max_day)
+                    .expect("valid date")
+                    .and_time(start.time()),
+            ))
         }
         register("EOMONTH", 1, 2, "Date", eomonth);
     }
 
     pub fn call(name: &str, args: &[Value]) -> Result<Value, FormulaError> {
         let reg = FunctionRegistry::global();
-        let handler = reg.handlers.get(name).ok_or_else(|| FormulaError::new(FormulaErrorKind::UnknownFunction, name.to_string()))?;
+        let handler = reg.handlers.get(name).ok_or_else(|| {
+            FormulaError::new(FormulaErrorKind::UnknownFunction, name.to_string())
+        })?;
         handler(args)
     }
 }
@@ -410,12 +492,16 @@ impl FunctionRegistry {
 fn as_datetime(v: &Value) -> Result<chrono::NaiveDateTime, FormulaError> {
     match v {
         Value::DateTime(dt) => Ok(*dt),
-        _ => Err(FormulaError::new(FormulaErrorKind::Value, "expected datetime value")),
+        _ => Err(FormulaError::new(
+            FormulaErrorKind::Value,
+            "expected datetime value",
+        )),
     }
 }
 
 fn need_number(v: &Value) -> Result<Decimal, FormulaError> {
-    v.as_number().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))
+    v.as_number()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected number"))
 }
 
 fn need_text(v: &Value) -> Result<&str, FormulaError> {
@@ -426,7 +512,8 @@ fn need_text(v: &Value) -> Result<&str, FormulaError> {
 }
 
 fn need_boolean(v: &Value) -> Result<bool, FormulaError> {
-    v.as_bool().ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected boolean"))
+    v.as_bool()
+        .ok_or_else(|| FormulaError::new(FormulaErrorKind::Value, "expected boolean"))
 }
 
 #[cfg(test)]
@@ -437,8 +524,19 @@ mod tests {
 
     struct BlankResolver;
     impl crate::eval::SheetResolver for BlankResolver {
-        fn cell_value(&self, _sheet: Option<&str>, _r: u32, _c: u32) -> Value { Value::empty() }
-        fn range_values(&self, _sheet: Option<&str>, _r1: u32, _c1: u32, _r2: u32, _c2: u32) -> Vec<Vec<Value>> { Vec::new() }
+        fn cell_value(&self, _sheet: Option<&str>, _r: u32, _c: u32) -> Value {
+            Value::empty()
+        }
+        fn range_values(
+            &self,
+            _sheet: Option<&str>,
+            _r1: u32,
+            _c1: u32,
+            _r2: u32,
+            _c2: u32,
+        ) -> Vec<Vec<Value>> {
+            Vec::new()
+        }
     }
 
     fn eval(formula: &str) -> Result<Value, FormulaError> {
@@ -447,5 +545,9 @@ mod tests {
     }
 
     #[test]
-    fn test_sum() { if let Ok(v) = eval("=SUM(1,2,3)") { assert_eq!(v, Value::number(6)); } }
+    fn test_sum() {
+        if let Ok(v) = eval("=SUM(1,2,3)") {
+            assert_eq!(v, Value::number(6));
+        }
+    }
 }

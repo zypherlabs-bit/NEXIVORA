@@ -115,7 +115,8 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, FormulaError> {
         }
 
         // Number
-        if c.is_ascii_digit() || (c == '.' && i + 1 < b.len() && (b[i + 1] as char).is_ascii_digit())
+        if c.is_ascii_digit()
+            || (c == '.' && i + 1 < b.len() && (b[i + 1] as char).is_ascii_digit())
         {
             let start = i;
             let mut has_dot = false;
@@ -169,10 +170,7 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, FormulaError> {
             } else {
                 TokenKind::Identifier(ident.to_string())
             };
-            tokens.push(Token {
-                kind,
-                pos: start,
-            });
+            tokens.push(Token { kind, pos: start });
             continue;
         }
 

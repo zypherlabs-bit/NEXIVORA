@@ -1,6 +1,6 @@
 //! Spreadsheet value type.
 
-use chrono::{NaiveDate, NaiveDateTime, Timelike, TimeZone, Utc};
+use chrono::{NaiveDate, NaiveDateTime, TimeZone, Timelike, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -63,7 +63,13 @@ impl Value {
             Value::Number(n) => Some(*n != Decimal::ZERO),
             Value::Text(s) => {
                 let t = s.trim().to_lowercase();
-                if t == "true" { Some(true) } else if t == "false" { Some(false) } else { None }
+                if t == "true" {
+                    Some(true)
+                } else if t == "false" {
+                    Some(false)
+                } else {
+                    None
+                }
             }
             _ => None,
         }
@@ -74,12 +80,23 @@ impl Value {
             Value::Empty => String::new(),
             Value::Number(n) => format!("{}", n),
             Value::Text(s) => s.clone(),
-            Value::Bool(b) => if *b { "TRUE".into() } else { "FALSE".into() },
+            Value::Bool(b) => {
+                if *b {
+                    "TRUE".into()
+                } else {
+                    "FALSE".into()
+                }
+            }
             Value::Error(e) => e.error_code().to_string(),
             Value::DateTime(dt) => dt.format("%Y-%m-%d %H:%M:%S").to_string(),
             Value::Array(rows) => rows
                 .iter()
-                .map(|row| row.iter().map(|v| v.display_string()).collect::<Vec<_>>().join(", "))
+                .map(|row| {
+                    row.iter()
+                        .map(|v| v.display_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                })
                 .collect::<Vec<_>>()
                 .join("; "),
         }

@@ -111,9 +111,7 @@ impl RangeReference {
     pub fn cells(&self) -> impl Iterator<Item = CellReference> {
         let s = self.start;
         let e = self.end;
-        (s.row..=e.row).flat_map(move |r| {
-            (s.col..=e.col).map(move |c| CellReference::new(r, c))
-        })
+        (s.row..=e.row).flat_map(move |r| (s.col..=e.col).map(move |c| CellReference::new(r, c)))
     }
 
     /// Render as A1 range notation.
@@ -172,10 +170,7 @@ pub enum Expr {
         args: Vec<Expr>,
     },
     /// A unary operation.
-    Unary {
-        op: UnOp,
-        expr: Box<Expr>,
-    },
+    Unary { op: UnOp, expr: Box<Expr> },
     /// A binary operation.
     Binary {
         op: BinOp,
@@ -186,7 +181,7 @@ pub enum Expr {
 
 impl Expr {
     /// Collect all cell and range references in this expression.
-    pub fn collect_references<'a>(&'a self, out: &mut Vec<RangeReference>) {
+    pub fn collect_references(&self, out: &mut Vec<RangeReference>) {
         match self {
             Expr::CellRef(c) => {
                 out.push(RangeReference::new(*c, *c));
