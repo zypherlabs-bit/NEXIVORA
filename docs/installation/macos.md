@@ -63,14 +63,18 @@ Compare the output with the SHA-256 checksum listed in the release notes.
 
 ### Notarization
 
-Nexivora is notarized by Apple. You can verify:
+Nexivora is signed and notarized by Apple **when** Developer ID credentials are configured for the release build
+(`APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_PASSWORD`, `APPLE_TEAM_ID`, `APPLE_P12_BASE64`). You can verify:
 
 ```bash
 # Check notarization status
 spctl -a -v ~/Applications/Nexivora.app
 ```
 
-Should return: `source=Notarized Developer ID`
+If notarized, it should return: `source=Notarized Developer ID`
+
+If the build was not signed (e.g. open-source CI without paid Apple Developer credentials), you may see
+"developer cannot be verified" — use the Gatekeeper "Open Anyway" instructions below.
 
 ## Troubleshooting
 
