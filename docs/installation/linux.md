@@ -7,7 +7,7 @@
 - **Processor**: 1 GHz or faster with 2 or more cores
 - **RAM**: 2 GB (4 GB recommended)
 - **Storage**: 500 MB available space
-- **Dependencies**: GTK 3.0+, libwebkit2gtk-4.0, and standard system libraries
+- **Dependencies**: GTK 3.0+, libwebkit2gtk-4.1, and standard system libraries
 
 ### Recommended Requirements
 - **Operating System**: Ubuntu 22.04 LTS, Fedora 38+, or equivalent
@@ -56,7 +56,7 @@ EOF
 ### DEB Package (Debian/Ubuntu)
 
 1. **Download** the DEB package from [GitHub Releases](https://github.com/zypherlabs-bit/NEXIVORA/releases)
-2. **Install dependencies**: `sudo apt update && sudo apt install -y libgtk-3-0 libwebkit2gtk-4.0-37`
+2. **Install dependencies**: `sudo apt update && sudo apt install -y libgtk-3-0 libwebkit2gtk-4.1-0`
 3. **Install**: `sudo dpkg -i nexivora-*.deb`
 4. **Fix dependencies**: `sudo apt --fix-broken install`
 
@@ -106,7 +106,7 @@ Compare the output with the SHA-256 checksum listed in the release notes.
 ```bash
 sudo dpkg --add-architecture i386
 sudo apt update
-sudo apt install libgtk-3-0:i386 libwebkit2gtk-4.0-37:i386
+sudo apt install libgtk-3-0:i386 libwebkit2gtk-4.1-0:i386
 ```
 
 ### DEB/RPM Issues
@@ -127,13 +127,13 @@ sudo dnf install -y $(rpm -qpR nexivora-*.rpm | grep -v "rpmlib(")
 **Solution**:
 ```bash
 # Ubuntu/Debian
-sudo apt install libgtk-3-0 libwebkit2gtk-4.0-37
+sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0
 
 # Fedora
-sudo dnf install gtk3 webkit2gtk3
+sudo dnf install gtk3 webkit2gtk4.1
 
 # openSUSE
-sudo zypper install gtk3 libwebkit2gtk-4_0-37
+sudo zypper install gtk3 libwebkit2gtk-4_1-0
 
 # Arch Linux
 sudo pacman -S gtk3 webkit2gtk
